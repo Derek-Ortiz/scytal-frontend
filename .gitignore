@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+dist-ssr/
+*.local
+
+# Editor y sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

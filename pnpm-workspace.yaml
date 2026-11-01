@@ -1,0 +1,4 @@
+# Settings de pnpm (v12): aprobar build scripts necesarios.
+# (`onlyBuiltDependencies` de v10 se sustituyó por `allowBuilds` en v11+)
+allowBuilds:
+  esbuild: true
