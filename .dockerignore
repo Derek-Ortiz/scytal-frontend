@@ -1,0 +1,24 @@
+# Dependencias y salidas de build (se generan dentro de la imagen)
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Carpeta de referencia del diseño original (no forma parte de la app)
+borrador
+
+# Git, IDEs y temporales
+.git
+.gitignore
+.vscode
+.idea
+*.log
+
+# Documentación (no se necesita dentro de la imagen)
+*.md
+
+# Los propios ficheros de Docker no entran en el contexto
+Dockerfile
+docker-compose.yml
+docker-compose.override.yml
+.dockerignore

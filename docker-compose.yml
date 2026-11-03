@@ -1,0 +1,33 @@
+name: scytal
+
+services:
+  # ── Producción: build estático servido por nginx ─────────────
+  #     docker compose up --build        →  http://localhost:8080
+  web:
+    build:
+      context: .
+      target: runtime
+    image: scytal-frontend:latest
+    ports:
+      - "${SCYTAL_PORT:-8080}:80"
+    restart: unless-stopped
+
+  # ── Desarrollo: Vite con hot-reload (HMR) sobre los fuentes ──
+  #     docker compose up dev --build    →  http://localhost:5173
+  # Usa el target `deps` (node_modules listos) y monta src/,
+  # public/ e index.html del host para que los cambios se vean al instante.
+  dev:
+    build:
+      context: .
+      target: deps
+    image: scytal-frontend-dev:latest
+    command: pnpm exec vite --host 0.0.0.0 --port 5173 --strictPort
+    environment:
+      VITE_DOCKER: "1"
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+    ports:
+      - "${SCYTAL_DEV_PORT:-5173}:5173"
+    profiles: ["dev"]
