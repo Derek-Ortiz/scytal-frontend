@@ -5,6 +5,7 @@ import type { UserRow } from '../data';
 import { Badge, Button, Card, DataTable, Icon, Input, PageHeader, QrPattern, SectionTitle } from '../components/ui';
 import { ApiError, cambiarContrasena } from '../api';
 import { evaluarClave, MINIMO_CLAVE } from '../password';
+import { AVISO, filtrarClave } from '../filtros';
 
 /** Configuración: Cuenta (+ Apariencia), Seguridad y 2FA, y Usuarios (solo org_admin). */
 
@@ -166,16 +167,22 @@ function Seguridad({ onPasswordChanged }: { onPasswordChanged: (aviso: string) =
             </div>
           </div>
         )}
-        <Input label="Contraseña actual" type="password" value={actual} onChange={setActual} />
+        <Input
+          label="Contraseña actual"
+          type="password"
+          value={actual}
+          onChange={(v) => setActual(filtrarClave(v))}
+          hint={AVISO.clave}
+        />
         <Input
           label="Nueva contraseña"
           type="password"
           value={nueva}
           onChange={(v) => {
-            setNueva(v);
+            setNueva(filtrarClave(v));
             setError(null);
           }}
-          hint={`Mínimo ${MINIMO_CLAVE} caracteres; el historial no admite las últimas 3.`}
+          hint={`Mínimo ${MINIMO_CLAVE} caracteres · ${AVISO.clave} · el historial no admite las últimas 3.`}
         />
         <div className="strength">
           <div className="strength-track">

@@ -184,7 +184,8 @@ export function AppShell({
           <div className="crumb">
             Acme Corporation <span>/</span> {crumbs[screen] ?? 'Operaciones · Dashboard'}
           </div>
-          <div className="top-actions">
+
+          <div className="top-actions" hidden>
             <label className="role-switch">
               <span>Rol</span>
               <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
@@ -206,6 +207,8 @@ export function AppShell({
               </select>
             </div>
           </div>
+
+
         </header>
         <main>{content}</main>
       </div>

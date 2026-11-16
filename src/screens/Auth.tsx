@@ -17,6 +17,7 @@ import {
   type Yo,
 } from '../api';
 import { evaluarClave, MINIMO_CLAVE } from '../password';
+import { AVISO, filtrarClave, filtrarCorreo, filtrarTexto } from '../filtros';
 
 /** Acceso real conectado al backend (`/auth`):
  *  registro → login (dos modos) → TOTP (enroll o verify) → app.
@@ -192,10 +193,16 @@ function Registro({
         label="Correo corporativo"
         placeholder="tu@empresa.com"
         value={correo}
-        onChange={setCorreo}
-        hint="Se aceptan dominios de desarrollo (.local)."
+        onChange={(v) => setCorreo(filtrarCorreo(v))}
+        hint={AVISO.correo}
       />
-      <Input label="Nombre de la organización" placeholder="Acme Corporation" value={organizacion} onChange={setOrganizacion} />
+      <Input
+        label="Nombre de la organización"
+        placeholder="Acme Corporation"
+        value={organizacion}
+        onChange={(v) => setOrganizacion(filtrarTexto(v))}
+        hint={AVISO.texto}
+      />
       <Input
         label="Identificador (slug), opcional"
         placeholder="mi-empresa"
@@ -203,7 +210,14 @@ function Registro({
         onChange={(v) => setSlug(slugificar(v))}
         hint={slugGenerado && !slug ? `Se generará automáticamente: ${slugGenerado}` : 'Minúsculas, números y guiones.'}
       />
-      <Input label="Contraseña" type="password" placeholder="••••••••••" value={pass} onChange={setPass} />
+      <Input
+        label="Contraseña"
+        type="password"
+        placeholder="••••••••••"
+        value={pass}
+        onChange={(v) => setPass(filtrarClave(v))}
+        hint={AVISO.clave}
+      />
       <Meter pass={pass} veredicto={veredicto} />
       <Button onClick={() => void registrarCuenta()} disabled={cargando || espera > 0}>
         {cargando ? 'Creando cuenta…' : espera > 0 ? `Demasiados intentos: espera ${espera} s…` : 'Crear cuenta'}
@@ -293,7 +307,8 @@ function Login({
         label="Correo corporativo"
         placeholder="tu@empresa.com"
         value={correo}
-        onChange={setCorreo}
+        onChange={(v) => setCorreo(filtrarCorreo(v))}
+        hint={AVISO.correo}
         error={error && !REGEX_CORREO.test(correo.trim()) ? 'Formato no válido' : undefined}
       />
       <Input
@@ -301,7 +316,8 @@ function Login({
         type="password"
         placeholder="••••••••••"
         value={pass}
-        onChange={setPass}
+        onChange={(v) => setPass(filtrarClave(v))}
+        hint={AVISO.clave}
         error={error && !pass.trim() ? 'Campo requerido' : undefined}
       />
       <button className="forgot">¿Olvidaste tu contraseña?</button>
@@ -596,8 +612,22 @@ function CambioContrasena({ setScreen, setNotice }: { setScreen: (s: Screen) => 
       <div className="auth-title">Cambia tu contraseña</div>
       <p>Es requerida antes de continuar con la configuración de tu acceso.</p>
       <ErrorBanner error={error} />
-      <Input label="Contraseña actual" type="password" placeholder="••••••••••" value={actual} onChange={setActual} />
-      <Input label="Nueva contraseña" type="password" placeholder="••••••••••••" value={nueva} onChange={setNueva} />
+      <Input
+        label="Contraseña actual"
+        type="password"
+        placeholder="••••••••••"
+        value={actual}
+        onChange={(v) => setActual(filtrarClave(v))}
+        hint={AVISO.clave}
+      />
+      <Input
+        label="Nueva contraseña"
+        type="password"
+        placeholder="••••••••••••"
+        value={nueva}
+        onChange={(v) => setNueva(filtrarClave(v))}
+        hint={AVISO.clave}
+      />
       <Meter pass={nueva} veredicto={veredicto} />
       <Button onClick={() => void actualizar()} disabled={cargando || espera > 0}>
         {cargando ? 'Actualizando…' : espera > 0 ? `Demasiados intentos: espera ${espera} s…` : 'Actualizar contraseña'}
