@@ -507,30 +507,32 @@ function Enrolamiento({ setScreen, setNotice }: { setScreen: (s: Screen) => void
             </div>
             <div>
               <span>2</span>
-              <p>Escanea el QR o usa esta clave manual (se muestra una sola vez):</p>
-            </div>
-            {datos && (
-              <div className="secret-row">
-                <code>{guardado ? '●●●● ●●●● ●●●● ●●●●' : datos.secreto_en_claro.replace(/(.{4})/g, '$1 ').trim()}</code>
-                <button
-                  className="mini-boton"
-                  onClick={() => {
-                    setGuardado(true);
-                    navigator.clipboard
-                      ?.writeText(datos.secreto_en_claro)
-                      .then(() => {
-                        setCopiado(true);
-                        window.setTimeout(() => setCopiado(false), 1600);
-                      })
-                      .catch(() => {
-                        /* sin permiso de portapapeles */
-                      });
-                  }}
-                >
-                  {copiado ? 'Copiado ✓' : 'Copiar y marcar como guardado'}
-                </button>
+              <div>
+                <p>Escanea el QR o usa esta clave manual (se muestra una sola vez):</p>
+                {datos && (
+                  <div className="secret-row">
+                    <code>{guardado ? '●●●● ●●●● ●●●● ●●●●' : datos.secreto_en_claro.replace(/(.{4})/g, '$1 ').trim()}</code>
+                    <button
+                      className="mini-boton"
+                      onClick={() => {
+                        setGuardado(true);
+                        navigator.clipboard
+                          ?.writeText(datos.secreto_en_claro)
+                          .then(() => {
+                            setCopiado(true);
+                            window.setTimeout(() => setCopiado(false), 1600);
+                          })
+                          .catch(() => {
+                            /* sin permiso de portapapeles */
+                          });
+                      }}
+                    >
+                      {copiado ? 'Copiado ✓' : 'Copiar y marcar como guardado'}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
             <div>
               <span>3</span>
               <p>Confirma con el primer código que genere tu app.</p>
