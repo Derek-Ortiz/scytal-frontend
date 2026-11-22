@@ -2,7 +2,6 @@ import type { Screen } from '../types';
 import { Badge, Button, Logo, MiniLine, RiskBadge } from '../components/ui';
 import { Icon } from '../components/icons';
 
-/** Landing pública: oscura, premium y tecnológica. */
 
 export function Landing({ setScreen }: { setScreen: (s: Screen) => void }) {
   const capabilities: Array<[string, string, string, Screen]> = [

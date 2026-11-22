@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 
-/** Catálogo de iconos SVG lineales, trazo 1.8, sin emojis. */
 export const iconPaths: Record<string, ReactNode> = {
   grid: (
     <>

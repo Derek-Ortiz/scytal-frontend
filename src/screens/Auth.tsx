@@ -4,6 +4,7 @@ import { Badge, Button, Icon, Input, Logo, Otp } from '../components/ui';
 import {
   ApiError,
   cambiarContrasena,
+  comprobarFiltracion,
   confirmar2FA,
   entrar,
   haySesion,
@@ -16,12 +17,9 @@ import {
   yo,
   type Yo,
 } from '../api';
-import { evaluarClave, MINIMO_CLAVE } from '../password';
+import { evaluarClave, MINIMO_CLAVE, useFortalezaServidor, type FortalezaServidor } from '../password';
 import { AVISO, filtrarClave, filtrarCorreo, filtrarTexto } from '../filtros';
 
-/** Acceso real conectado al backend (`/auth`):
- *  registro → login (dos modos) → TOTP (enroll o verify) → app.
- *  Contrato: backend-scytal/prompt_frontend.md · Tokens solo en memoria. */
 
 export type AuthMode = 'login' | 'register' | 'totp' | 'onboarding' | 'password';
 
@@ -34,7 +32,6 @@ interface ErrorLocal {
   requestId?: string | null;
 }
 
-/** Traduce un error de la API (o inesperado) a un banner local. */
 function traducir(e: unknown, titulo: string): ErrorLocal {
   if (!(e instanceof ApiError)) {
     return { titulo, texto: e instanceof Error ? e.message : 'Error inesperado.' };
@@ -44,7 +41,6 @@ function traducir(e: unknown, titulo: string): ErrorLocal {
   return { titulo, texto, requestId: e.requestId };
 }
 
-/** Cuenta atrás para el rate limiting (429 + Retry-After del backend). */
 function useReintento(): [number, (segundos: number) => void] {
   const [segundos, setSegundos] = useState(0);
 
@@ -116,7 +112,6 @@ export function AuthShell({
   );
 }
 
-/* ─────────────────────────────────── Registro ───────────────────────────── */
 
 function Registro({
   setScreen,
@@ -135,6 +130,7 @@ function Registro({
   const [cargando, setCargando] = useState(false);
 
   const veredicto = evaluarClave(pass);
+  const fortaleza = useFortalezaServidor(pass);
   const slugGenerado = slugificar(organizacion);
   const [espera, iniciarEspera] = useReintento();
 
@@ -164,6 +160,14 @@ function Registro({
     }
     setCargando(true);
     try {
+      const filtrada = await comprobarFiltracion(pass);
+      if (filtrada === true) {
+        setError({
+          titulo: 'Contraseña filtrada',
+          texto: 'Aparece en filtraciones públicas conocidas (k-anonimato HIBP). Elige una contraseña distinta.',
+        });
+        return;
+      }
       const r = await registrar({
         correo: correoLimpio,
         contrasena: pass,
@@ -218,7 +222,7 @@ function Registro({
         onChange={(v) => setPass(filtrarClave(v))}
         hint={AVISO.clave}
       />
-      <Meter pass={pass} veredicto={veredicto} />
+      <Meter pass={pass} veredicto={veredicto} servidor={fortaleza} />
       <Button onClick={() => void registrarCuenta()} disabled={cargando || espera > 0}>
         {cargando ? 'Creando cuenta…' : espera > 0 ? `Demasiados intentos: espera ${espera} s…` : 'Crear cuenta'}
       </Button>
@@ -232,7 +236,6 @@ function Registro({
   );
 }
 
-/* ───────────────────────────────────── Login ────────────────────────────── */
 
 function Login({
   setScreen,
@@ -279,10 +282,8 @@ function Login({
     try {
       const r = await entrar(correo.trim().toLowerCase(), pass);
       if (r.must_enroll_totp && r.provisional_access_token) {
-        // Modo B: cuenta nueva sin TOTP → enrolamiento (antes, cambio de contraseña si toca).
         setScreen(r.requires_password_change ? 'password' : 'onboarding');
       } else if (r.requires_totp && r.pending_token) {
-        // Modo A: TOTP ya configurado → verificación.
         setScreen('totp');
       } else {
         setError({ titulo: 'Respuesta inesperada', texto: 'El servidor no devolvió un modo de acceso reconocible.' });
@@ -336,7 +337,6 @@ function Login({
   );
 }
 
-/* ──────────────────────────── TOTP (modo A: verify) ─────────────────────── */
 
 function Totp({
   setScreen,
@@ -410,7 +410,6 @@ function Totp({
   );
 }
 
-/* ───────────────────────────── Enrolamiento real ────────────────────────── */
 
 function Enrolamiento({ setScreen, setNotice }: { setScreen: (s: Screen) => void; setNotice: (n: string | null) => void }) {
   const [datos, setDatos] = useState<Awaited<ReturnType<typeof preparar2FA>> | null>(null);
@@ -523,7 +522,6 @@ function Enrolamiento({ setScreen, setNotice }: { setScreen: (s: Screen) => void
                             window.setTimeout(() => setCopiado(false), 1600);
                           })
                           .catch(() => {
-                            /* sin permiso de portapapeles */
                           });
                       }}
                     >
@@ -557,7 +555,6 @@ function Enrolamiento({ setScreen, setNotice }: { setScreen: (s: Screen) => void
   );
 }
 
-/* ────────────────────────────── Cambio de contraseña ────────────────────── */
 
 function CambioContrasena({ setScreen, setNotice }: { setScreen: (s: Screen) => void; setNotice: (n: string | null) => void }) {
   const [actual, setActual] = useState('');
@@ -567,6 +564,7 @@ function CambioContrasena({ setScreen, setNotice }: { setScreen: (s: Screen) => 
   const [espera, iniciarEspera] = useReintento();
 
   const veredicto = evaluarClave(nueva);
+  const fortaleza = useFortalezaServidor(nueva);
   const activo = haySesion();
 
   async function actualizar() {
@@ -595,6 +593,14 @@ function CambioContrasena({ setScreen, setNotice }: { setScreen: (s: Screen) => 
     }
     setCargando(true);
     try {
+      const filtrada = await comprobarFiltracion(nueva);
+      if (filtrada === true) {
+        setError({
+          titulo: 'Contraseña filtrada',
+          texto: 'La nueva contraseña aparece en filtraciones públicas conocidas. Elige otra.',
+        });
+        return;
+      }
       await cambiarContrasena(actual, nueva);
       setNotice('Contraseña actualizada. Todos los tokens fueron invalidados: vuelve a iniciar sesión.');
       setScreen('login');
@@ -630,7 +636,7 @@ function CambioContrasena({ setScreen, setNotice }: { setScreen: (s: Screen) => 
         onChange={(v) => setNueva(filtrarClave(v))}
         hint={AVISO.clave}
       />
-      <Meter pass={nueva} veredicto={veredicto} />
+      <Meter pass={nueva} veredicto={veredicto} servidor={fortaleza} />
       <Button onClick={() => void actualizar()} disabled={cargando || espera > 0}>
         {cargando ? 'Actualizando…' : espera > 0 ? `Demasiados intentos: espera ${espera} s…` : 'Actualizar contraseña'}
       </Button>
@@ -642,7 +648,6 @@ function CambioContrasena({ setScreen, setNotice }: { setScreen: (s: Screen) => 
   );
 }
 
-/* ───────────────────────────────── Piezas comunes ───────────────────────── */
 
 function slugificar(v: string): string {
   return v
@@ -654,17 +659,33 @@ function slugificar(v: string): string {
     .slice(0, 63);
 }
 
-/** Medidor zxcvbn (mismas reglas que el backend: ≥ 10 caracteres y score ≥ 3). */
-function Meter({ pass, veredicto }: { pass: string; veredicto: ReturnType<typeof evaluarClave> }) {
+function Meter({
+  pass,
+  veredicto,
+  servidor,
+}: {
+  pass: string;
+  veredicto: ReturnType<typeof evaluarClave>;
+  servidor?: FortalezaServidor;
+}) {
   if (!pass) return null;
   return (
-    <div className="strength">
-      <div className="strength-track">
-        <span className={veredicto.cls} style={{ width: `${(veredicto.score + 1) * 20}%` }}></span>
+    <>
+      <div className="strength">
+        <div className="strength-track">
+          <span className={veredicto.cls} style={{ width: `${(veredicto.score + 1) * 20}%` }}></span>
+        </div>
+        <span className={veredicto.cls}>
+          {veredicto.etiqueta} · se agrieta en {veredicto.tiempo}
+        </span>
       </div>
-      <span className={veredicto.cls}>
-        {veredicto.etiqueta} · se agrieta en {veredicto.tiempo}
-      </span>
-    </div>
+      {servidor && (servidor.score !== null || servidor.aviso) && (
+        <p className="field-hint">
+          {servidor.score !== null
+            ? `Validación del servidor: ${servidor.score}/4${servidor.errores.length ? ` · ${servidor.errores.join(' · ')}` : ' · sin incidencias'}`
+            : servidor.aviso}
+        </p>
+      )}
+    </>
   );
 }

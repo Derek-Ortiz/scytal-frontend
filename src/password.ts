@@ -1,27 +1,18 @@
+import { useEffect, useRef, useState } from 'react';
 import { ZxcvbnFactory } from '@zxcvbn-ts/core';
 import { adjacencyGraphs, dictionary } from '@zxcvbn-ts/language-common';
+import { ApiError, chequearFortalezaClave } from './api';
 
-/**
- * Medidor de contraseñas con zxcvbn (misma estimación que aplica el backend:
- * mín. 10 caracteres y zxcvbn ≥ 3). Las etiquetas y el tiempo de ataque se
- * presentan en español; los feedback detallados de la librería se omiten para
- * no mezclar idioma.
- */
 
 const zxcvbn = new ZxcvbnFactory({ dictionary, graphs: adjacencyGraphs });
 
-/** Mínimo de longitud que exige el backend. */
 export const MINIMO_CLAVE = 10;
 
 export interface VeredictoClave {
-  /** Nivel zxcvbn 0-4 (-1 si está vacía). */
   score: number;
   etiqueta: 'Muy débil' | 'Débil' | 'Aceptable' | 'Buena' | 'Excelente' | '—';
-  /** Clase CSS del medidor (.strength-track): weak | mid | strong. */
   cls: 'weak' | 'mid' | 'strong';
-  /** Tiempo estimado de agrietamiento (off-line), formateado en español. */
   tiempo: string;
-  /** Cumple la regla de negocio del backend: ≥ 10 caracteres y zxcvbn ≥ 3. */
   valida: boolean;
 }
 
@@ -57,4 +48,66 @@ function tiempoAtaque(segundos: number): string {
   if (anos < 1000) return `${Math.round(anos)} años`;
   if (anos < 1e9) return 'siglos';
   return 'era geológica';
+}
+
+
+export interface FortalezaServidor {
+  score: number | null;
+  errores: string[];
+  aviso: string | null;
+}
+
+const INTERVALO_MS = 700;
+const ESPERA_MINIMA_MS = 6500;
+
+export function useFortalezaServidor(clave: string, activo = true): FortalezaServidor {
+  const [resultado, setResultado] = useState<FortalezaServidor>({ score: null, errores: [], aviso: null });
+  const ultimo = useRef(0);
+  const espera = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (espera.current !== null) {
+      window.clearTimeout(espera.current);
+      espera.current = null;
+    }
+
+    if (!activo || clave.length < 8) {
+      setResultado({ score: null, errores: [], aviso: null });
+      return;
+    }
+
+    const consultar = async () => {
+      const retraso = ESPERA_MINIMA_MS - (Date.now() - ultimo.current);
+      if (retraso > 0) {
+        espera.current = window.setTimeout(() => void consultar(), retraso);
+        return;
+      }
+      ultimo.current = Date.now();
+      try {
+        const r = await chequearFortalezaClave(clave);
+        setResultado({ score: r.score, errores: r.errores, aviso: null });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 429) {
+          setResultado({
+            score: null,
+            errores: [],
+            aviso: `Límite de consultas alcanzado: espera ${e.retryAfter ?? 60} s y sigue escribiendo.`,
+          });
+        } else if (e instanceof ApiError && e.code === 'HIBP_UNAVAILABLE') {
+          setResultado({
+            score: null,
+            errores: [],
+            aviso: 'El servicio de filtraciones no responde (aviso transitorio); el servidor valida igual al enviar.',
+          });
+        }
+      }
+    };
+
+    espera.current = window.setTimeout(() => void consultar(), INTERVALO_MS);
+    return () => {
+      if (espera.current !== null) window.clearTimeout(espera.current);
+    };
+  }, [clave, activo]);
+
+  return resultado;
 }

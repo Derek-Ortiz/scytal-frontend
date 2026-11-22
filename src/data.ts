@@ -1,12 +1,8 @@
 import type { Risk, Role } from './types';
 
-/**
- * Modelo de datos simulado de Scytal mientras no exista backend.
- * Todas las pantallas consumen estos mismos datos para mantener coherencia.
- */
 
 export interface AlertItem {
-  id: number;
+  id: string | number;
   tipo: string;
   contexto: string;
   severidad: Risk;
@@ -77,7 +73,6 @@ export interface UserRow {
   estado: 'Activo' | 'Invitado';
 }
 
-/** Alertas iniciales; el estado vive en App para que badge, dashboard y alertas coincidan. */
 export const alertasIniciales: AlertItem[] = [
   { id: 1, tipo: 'Contraseña filtrada detectada', contexto: 'Cuenta · lmendez@acme.es', severidad: 'Crítico', fecha: 'Hace 12 min', estado: 'Pendiente' },
   { id: 2, tipo: 'Destinatario en riesgo crítico', contexto: 'Campaña · Nómina Q2', severidad: 'Alto', fecha: 'Hace 48 min', estado: 'Pendiente' },
@@ -85,7 +80,6 @@ export const alertasIniciales: AlertItem[] = [
   { id: 4, tipo: 'Nueva cuenta administrativa', contexto: 'Creada por Ana Silva', severidad: 'Bajo', fecha: 'Ayer, 17:42', estado: 'Resuelta' },
 ];
 
-/** Bitácora de auditoría inmutable. */
 export const auditLog: AuditRow[] = [
   { evento: 'Campaña finalizada', actor: 'Ana Silva · org_admin', ip: '192.168.4.21', fecha: '18 jun 2025 · 16:42', resultado: 'Correcto' },
   { evento: 'Inicio de sesión', actor: 'Diego Muñoz · analyst', ip: '192.168.4.38', fecha: '18 jun 2025 · 15:18', resultado: 'Correcto' },
@@ -95,7 +89,6 @@ export const auditLog: AuditRow[] = [
   { evento: 'Plantilla editada', actor: 'Ana Silva · org_admin', ip: '192.168.4.21', fecha: '16 jun 2025 · 09:07', resultado: 'Correcto' },
 ];
 
-/** Campañas — 15 filas para demostrar paginación real (5 por página). */
 export const campanas: CampaignRow[] = [
   { id: 1, nombre: 'Q2 · Actualización de nómina', grupo: 'Finanzas Europa', canales: 'mail,qr', estado: 'Activa', fecha: '12 jun 2025', interaccion: '38,4%' },
   { id: 2, nombre: 'Portal de beneficios 2025', grupo: 'Recursos Humanos', canales: 'mail', estado: 'Finalizada', fecha: '28 may 2025', interaccion: '21,7%' },
@@ -114,7 +107,6 @@ export const campanas: CampaignRow[] = [
   { id: 15, nombre: 'Nómina de diciembre ajustada', grupo: 'Finanzas Europa', canales: 'mail,qr', estado: 'Finalizada', fecha: '28 ene 2025', interaccion: '35,2%' },
 ];
 
-/** Resultados por destinatario de la campaña "Q2 · Actualización de nómina". */
 export const resultadoCampana: CampaignRecipientRow[] = [
   { nombre: 'Lucía Martín', correo: 'lucia.martin@acme.es', abrio: 'Sí · 09:42', clic: 'Sí · 09:44', datos: 'Sí · 09:45', riesgo: 'Crítico' },
   { nombre: 'Carlos Mena', correo: 'carlos.mena@acme.es', abrio: 'Sí · 10:13', clic: 'Sí · 10:16', datos: 'No', riesgo: 'Alto' },
@@ -124,7 +116,6 @@ export const resultadoCampana: CampaignRecipientRow[] = [
   { nombre: 'Iván Torres', correo: 'ivan.torres@acme.es', abrio: 'Sí · 16:02', clic: 'Sí · 16:07', datos: 'No', riesgo: 'Alto' },
 ];
 
-/** Grupos con sus destinatarios; alimenta la vista Grupos y el perfil individual. */
 export const grupos: GroupRow[] = [
   {
     nombre: 'Finanzas Europa',
@@ -176,7 +167,6 @@ export const grupos: GroupRow[] = [
   },
 ];
 
-/** Biblioteca de plantillas. */
 export const plantillas: TemplateRow[] = [
   { id: 1, nombre: 'Actualización de nómina', categoria: 'Finanzas', canal: 'mail', actualizada: 'Hace 2 días', descripcion: 'Portal de nómina con revisión de datos pendiente.' },
   { id: 2, nombre: 'Factura vencida', categoria: 'Finanzas', canal: 'mail', actualizada: 'Hace 4 días', descripcion: 'Aviso de impago con adjunto simulado.' },
@@ -186,7 +176,6 @@ export const plantillas: TemplateRow[] = [
   { id: 6, nombre: 'Documento compartido en Drive', categoria: 'General', canal: 'mail', actualizada: 'Hace 12 días', descripcion: 'Enlace a documento interno con permisos.' },
 ];
 
-/** Historial individual reutilizado por el perfil de cada destinatario (demo). */
 export const historialDemo: Array<{ fecha: string; campana: string; accion: string; riesgo: Risk }> = [
   { fecha: '12 jun 2025', campana: 'Q2 · Actualización de nómina', accion: 'Envió datos', riesgo: 'Crítico' },
   { fecha: '09 may 2025', campana: 'Restablecimiento VPN', accion: 'Hizo clic', riesgo: 'Alto' },
@@ -194,14 +183,12 @@ export const historialDemo: Array<{ fecha: string; campana: string; accion: stri
   { fecha: '04 mar 2025', campana: 'Factura vencida', accion: 'Sin interacción', riesgo: 'Bajo' },
 ];
 
-/** Usuarios de la organización para Configuración → Usuarios. */
 export const usuariosIniciales: UserRow[] = [
   { nombre: 'Ana Silva', correo: 'ana.silva@acme.es', rol: 'org_admin', ultimoAcceso: 'Ahora', estado: 'Activo' },
   { nombre: 'Diego Muñoz', correo: 'diego.munoz@acme.es', rol: 'analyst', ultimoAcceso: 'Hoy, 15:18', estado: 'Activo' },
   { nombre: 'Marta León', correo: 'marta.leon@acme.es', rol: 'analyst', ultimoAcceso: 'Ayer, 09:31', estado: 'Activo' },
 ];
 
-/** Descarga real de un CSV (utilidad usada por dashboard, campañas, reportes y auditoría). */
 export function descargarCSV(nombre: string, filas: Array<Array<string | number>>): void {
   const csv = filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
   const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });

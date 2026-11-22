@@ -1,7 +1,6 @@
 import type { Screen, SystemStateMode } from '../types';
 import { Button, Card, Icon, PageHeader, SectionTitle } from '../components/ui';
 
-/** Estados del sistema: variantes de vacío y de carga mostradas como catálogo navegable. */
 
 export function SystemStates({
   mode,

@@ -1,70 +1,122 @@
-import { useState } from 'react';
-import { campanas, descargarCSV } from '../data';
-import { Badge, Bars, Button, Card, Icon, PageHeader, RiskBadge, SectionTitle, Logo, DataTable } from '../components/ui';
+import { useEffect, useState } from 'react';
+import { descargarCSV } from '../data';
+import {
+  ApiError,
+  exportarReporteCampana,
+  exportarReporteGrupo,
+  listarCampanas,
+  listarGrupos,
+  type Campana,
+  type Grupo,
+} from '../api';
+import { Badge, Bars, Button, Card, Icon, PageHeader, RiskBadge, SectionTitle, Logo, DataTable, Select } from '../components/ui';
 
 const REPORTES = [
   {
     titulo: 'Resumen por campaña',
     descripcion: 'Resultados, embudo y detalle por destinatario.',
     icono: 'file',
-    fecha: '18 jun 2025',
     pdfTitulo: 'Resumen de campaña',
-    pdfSub: 'Q2 · Actualización de nómina',
-    pdfArchivo: 'reporte_campana_Q2.pdf',
+    pdfSub: 'Resultados y embudo de interacción',
+    pdfArchivo: 'campana.csv',
   },
   {
     titulo: 'Madurez por grupo',
-    descripcion: 'Evolución comparativa y ranking de riesgo.',
+    descripcion: 'Índice, distribución y tabla de destinatarios.',
     icono: 'chart',
-    fecha: '17 jun 2025',
     pdfTitulo: 'Madurez por grupo',
-    pdfSub: 'Comparativa Abril – Junio 2025',
-    pdfArchivo: 'reporte_madurez_grupos.pdf',
+    pdfSub: 'Comparativa y ranking de riesgo',
+    pdfArchivo: 'grupo.csv',
   },
   {
     titulo: 'Resumen ejecutivo',
     descripcion: 'Indicadores clave para dirección.',
     icono: 'shield',
-    fecha: '12 jun 2025',
     pdfTitulo: 'Resumen ejecutivo',
     pdfSub: 'Riesgo humano · Trimestre actual',
     pdfArchivo: 'reporte_ejecutivo.pdf',
   },
 ] as const;
 
-/** Reportes: generación de entregables, descargas reales de CSV y preview visual estilo PDF. */
 
 export function Reports() {
   const [sel, setSel] = useState(0);
   const [previewVisible, setPreviewVisible] = useState(true);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const [campanas, setCampanas] = useState<Campana[]>([]);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [campanaId, setCampanaId] = useState('');
+  const [grupoId, setGrupoId] = useState('');
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const [c, g] = await Promise.all([listarCampanas({ limit: 100 }), listarGrupos(100, 0)]);
+        if (!vivo) return;
+        setCampanas(c.items);
+        setGrupos(g.items);
+        setCampanaId((prev) => prev || c.items[0]?.id_campanas || '');
+        setGrupoId((prev) => prev || g.items[0]?.id_grupos || '');
+      } catch (e) {
+        if (vivo) setError(e instanceof ApiError ? e.message : 'No pudimos cargar las campañas y grupos.');
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   const rep = REPORTES[sel];
 
-  const descargarPdf = () => setAviso(`${rep.pdfArchivo} generado correctamente (demo sin backend).`);
-  const descargarCsv = () => {
+  const descargar = async (formato: 'csv' | 'pdf') => {
+    setError(null);
+    setAviso(null);
     if (sel === 0) {
-      descargarCSV('scytal_campanas.csv', [
-        ['Campaña', 'Grupo', 'Estado', 'Fecha', 'Interacción'],
-        ...campanas.map((c) => [c.nombre, c.grupo, c.estado, c.fecha, c.interaccion]),
-      ]);
-    } else if (sel === 1) {
-      descargarCSV('scytal_madurez.csv', [
-        ['Grupo', 'Miembros', 'Índice', 'Variación'],
-        ['Finanzas Europa', '124', '38,2', '−2,1'],
-        ['Recursos Humanos', '86', '27,4', '+1,4'],
-        ['Soporte y Operaciones', '213', '22,1', '−5,2'],
-        ['Dirección', '18', '16,8', '−3,7'],
-      ]);
-    } else {
+      if (!campanaId) {
+        setError('Selecciona una campaña para exportar.');
+        return;
+      }
+      setEnviando(true);
+      try {
+        const archivo = await exportarReporteCampana(campanaId, formato);
+        setAviso(`${archivo} descargado correctamente.`);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'No pudimos generar el reporte de la campaña.');
+      } finally {
+        setEnviando(false);
+      }
+      return;
+    }
+    if (sel === 1) {
+      if (!grupoId) {
+        setError('Selecciona un grupo para exportar.');
+        return;
+      }
+      setEnviando(true);
+      try {
+        const archivo = await exportarReporteGrupo(grupoId, formato);
+        setAviso(`${archivo} descargado correctamente.`);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'No pudimos generar el reporte del grupo.');
+      } finally {
+        setEnviando(false);
+      }
+      return;
+    }
+    if (formato === 'csv') {
       descargarCSV('scytal_ejecutivo.csv', [
         ['Indicador', 'Valor'],
-        ['Índice promedio', '31,8'],
-        ['Riesgo alto o crítico', '14,6%'],
-        ['Interacción media', '30,1%'],
+        ['Campañas totales', String(campanas.length)],
+        ['Grupos', String(grupos.length)],
       ]);
+      setAviso('scytal_ejecutivo.csv descargado.');
+    } else {
+      setAviso(`${rep.pdfArchivo} generado correctamente (demo sin backend).`);
     }
-    setAviso(`${rep.pdfArchivo.replace('.pdf', '.csv')} descargado.`);
   };
 
   return (
@@ -74,6 +126,15 @@ export function Reports() {
         title="Reportes"
         description="Genera entregables ejecutivos y datos para análisis."
       />
+      {error && (
+        <div className="error-banner">
+          <span>!</span>
+          <div>
+            <strong>No pudimos generar el reporte</strong>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
       {aviso && (
         <div className="success-banner">
           <Icon name="check" />
@@ -100,21 +161,41 @@ export function Reports() {
               <div>
                 <strong>{r.titulo}</strong>
                 <span>{r.descripcion}</span>
-                <small>Última generación: {r.fecha}</small>
+                <small>
+                  {i === 0
+                    ? campanas.length
+                      ? `${campanas.length} campañas disponibles`
+                      : 'Cargando campañas…'
+                    : i === 1
+                      ? grupos.length
+                        ? `${grupos.length} grupos disponibles`
+                        : 'Cargando grupos…'
+                      : 'Indicadores de la organización'}
+                </small>
               </div>
               <div className="report-actions">
                 <Button
                   small
                   variant="secondary"
                   icon="download"
+                  disabled={enviando}
                   onClick={() => {
                     setSel(i);
-                    descargarPdf();
+                    void descargar('pdf');
                   }}
                 >
                   PDF
                 </Button>
-                <Button small variant="ghost" icon="download" onClick={() => { setSel(i); descargarCsv(); }}>
+                <Button
+                  small
+                  variant="ghost"
+                  icon="download"
+                  disabled={enviando}
+                  onClick={() => {
+                    setSel(i);
+                    void descargar('csv');
+                  }}
+                >
                   CSV
                 </Button>
                 <button
@@ -130,6 +211,33 @@ export function Reports() {
               </div>
             </Card>
           ))}
+          {sel < 2 && (
+            <Card>
+              <SectionTitle
+                title={sel === 0 ? 'Campaña a exportar' : 'Grupo a exportar'}
+                description="El backend genera el archivo y lo adjunta como descarga"
+              />
+              {sel === 0 ? (
+                <Select label="Campaña" value={campanaId} onChange={setCampanaId}>
+                  {campanas.length === 0 && <option value="">Sin campañas</option>}
+                  {campanas.map((c) => (
+                    <option key={c.id_campanas} value={c.id_campanas}>
+                      {c.nombre}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Select label="Grupo" value={grupoId} onChange={setGrupoId}>
+                  {grupos.length === 0 && <option value="">Sin grupos</option>}
+                  {grupos.map((g) => (
+                    <option key={g.id_grupos} value={g.id_grupos}>
+                      {g.nombre}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Card>
+          )}
           {previewVisible && (
             <Card>
               <SectionTitle
@@ -151,7 +259,7 @@ export function Reports() {
         {previewVisible && (
           <Card className="pdf-shell">
             <div className="pdf-toolbar">
-              <span>Preview · {rep.pdfArchivo}</span>
+              <span>Preview · {sel === 0 ? 'Resumen de campaña' : sel === 1 ? 'Madurez por grupo' : rep.pdfArchivo}</span>
               <Badge>3 páginas</Badge>
             </div>
             <div className="pdf-page">
@@ -164,34 +272,27 @@ export function Reports() {
               <div className="pdf-rule"></div>
               <div className="pdf-kpis">
                 <div>
-                  <span>Índice</span>
-                  <strong>
-                    {sel === 1 ? '38,2' : sel === 2 ? '31,8' : '31,8'}
-                  </strong>
+                  <span>Campañas</span>
+                  <strong>{campanas.length || '—'}</strong>
                 </div>
                 <div>
-                  <span>Interacción</span>
-                  <strong>
-                    {sel === 1 ? '27%' : sel === 2 ? '30%' : '38%'}
-                  </strong>
+                  <span>Grupos</span>
+                  <strong>{grupos.length || '—'}</strong>
                 </div>
                 <div>
                   <span>Audiencia</span>
-                  <strong>
-                    {sel === 1 ? '441' : sel === 2 ? '847' : '124'}
-                  </strong>
+                  <strong>{grupos.reduce((n, g) => n + g.metricas.destinatarios_activos, 0) || '—'}</strong>
                 </div>
               </div>
               <div className="pdf-heading">Resumen ejecutivo</div>
               <p>
-                La campaña muestra una mejora de 4,2 puntos respecto al periodo anterior. El principal foco de
-                exposición se concentra en el grupo de mayor índice; el material educativo post-campaña ya fue
-                asignado.
+                Los indicadores se calculan con los datos reales de la organización: campañas finalizadas,
+                interacción registrada e índice de madurez por grupo.
               </p>
               <div className="pdf-chart">
                 <Bars compact />
               </div>
-              <div className="pdf-footer">Scytal Security · Generado el {rep.fecha}</div>
+              <div className="pdf-footer">Scytal Security · Generado el {new Date().toLocaleDateString('es-ES')}</div>
             </div>
           </Card>
         )}
