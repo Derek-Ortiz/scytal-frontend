@@ -1,43 +1,99 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Screen } from '../types';
-import { campanas, descargarCSV } from '../data';
-import type { CampaignRow } from '../data';
-import { Badge, Button, Card, DataTable, PageHeader, Select } from '../components/ui';
-import { ChannelIcons, Icon } from '../components/ui';
+import { Badge, Button, Card, ChannelIcons, DataTable, Icon, PageHeader, Select } from '../components/ui';
+import { ApiError, listarCampanas, listarGrupos, type Campana, type EstadoCampana, type Grupo } from '../api';
+import { descargarCSV } from '../data';
+
 
 const PAGE_SIZE = 5;
-const ESTADOS = ['Todos', 'Activa', 'Finalizada', 'Borrador'] as const;
-const GRUPOS = ['Todos los grupos', 'Finanzas Europa', 'Recursos Humanos', 'Soporte y Operaciones', 'Dirección', 'Toda la organización'] as const;
 
-/** Lista de campañas: filtros, buscador, estado, canales, fecha, interacción y paginación reales. */
+const ESTADOS: Array<readonly [EstadoCampana | 'todos', string]> = [
+  ['todos', 'Todos los estados'],
+  ['pendiente', 'Pendiente'],
+  ['activa', 'Activa'],
+  ['completada', 'Completada'],
+  ['cancelada', 'Cancelada'],
+];
 
-export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScreen: (s: Screen) => void }) {
-  const [estado, setEstado] = useState<string>('Todos');
-  const [grupo, setGrupo] = useState<string>(GRUPOS[0]);
+export function Campaigns({
+  readonly,
+  setScreen,
+  onOpenCampaign,
+}: {
+  readonly: boolean;
+  setScreen: (s: Screen) => void;
+  onOpenCampaign: (id: string) => void;
+}) {
+  const [estado, setEstado] = useState<EstadoCampana | 'todos'>('todos');
+  const [grupo, setGrupo] = useState<string>('todos');
   const [busqueda, setBusqueda] = useState('');
   const [pagina, setPagina] = useState(1);
+  const [paginaDatos, setPaginaDatos] = useState<{ items: Campana[]; total: number } | null>(null);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtradas = useMemo(() => {
+  useEffect(() => {
+    let vivo = true;
+    listarGrupos(100, 0)
+      .then((p) => {
+        if (vivo) setGrupos(p.items);
+      })
+      .catch(() => {
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const cargar = useCallback(async () => {
+    setError(null);
+    try {
+      const p = await listarCampanas({
+        estado: estado === 'todos' ? undefined : estado,
+        grupo_id: grupo === 'todos' ? undefined : grupo,
+        limit: PAGE_SIZE,
+        offset: (pagina - 1) * PAGE_SIZE,
+      });
+      setPaginaDatos({ items: p.items, total: p.total });
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No pudimos cargar las campañas.');
+    }
+  }, [estado, grupo, pagina]);
+
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+
+  const nombreGrupo = (id: string): string => grupos.find((g) => g.id_grupos === id)?.nombre ?? id.slice(0, 8) + '…';
+
+  const filtradas = (paginaDatos?.items ?? []).filter((c) => {
     const q = busqueda.trim().toLowerCase();
-    return campanas.filter(
-      (c) =>
-        (estado === 'Todos' || c.estado === estado) &&
-        (grupo === GRUPOS[0] || c.grupo === grupo) &&
-        (!q || c.nombre.toLowerCase().includes(q) || c.grupo.toLowerCase().includes(q)),
-    );
-  }, [estado, grupo, busqueda]);
+    return !q || c.nombre.toLowerCase().includes(q) || nombreGrupo(c.grupo_id).toLowerCase().includes(q);
+  });
 
-  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
-  const paginaActual = Math.min(pagina, totalPaginas);
-  const visibles = filtradas.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE);
-  const desde = filtradas.length === 0 ? 0 : (paginaActual - 1) * PAGE_SIZE + 1;
-  const hasta = Math.min(paginaActual * PAGE_SIZE, filtradas.length);
+  const total = paginaDatos?.total ?? 0;
+  const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const exportar = () => {
     descargarCSV('scytal_campanas.csv', [
-      ['Campaña', 'Grupo objetivo', 'Canales', 'Estado', 'Lanzamiento', 'Interacción'],
-      ...filtradas.map((c: CampaignRow) => [c.nombre, c.grupo, c.canales, c.estado, c.fecha, c.interaccion]),
+      ['Campaña', 'Grupo', 'Canales', 'Estado', 'Lanzada', 'Creada'],
+      ...filtradas.map((c) => [
+        c.nombre,
+        nombreGrupo(c.grupo_id),
+        c.canales.map((x) => x.canal).join('+') || '—',
+        c.estado,
+        c.iniciada_en ? fecha(c.iniciada_en) : '—',
+        fecha(c.creado_en),
+      ]),
     ]);
+  };
+
+  const badgeEstado = (e: EstadoCampana) => {
+    if (e === 'activa') return <Badge tone="azul">Activa</Badge>;
+    if (e === 'completada') return <Badge tone="bajo">Completada</Badge>;
+    if (e === 'cancelada') return <Badge tone="alto">Cancelada</Badge>;
+    if (e === 'programada') return <Badge tone="medio">Programada</Badge>;
+    return <Badge>Pendiente</Badge>;
   };
 
   return (
@@ -45,7 +101,7 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
       <PageHeader
         eyebrow="Simulaciones"
         title="Campañas"
-        description="Configura y supervisa simulaciones de phishing para tus grupos."
+        description="Configura y supervisa simulaciones de phishing para tus grupos (§12)."
         action={
           !readonly ? (
             <Button icon="plus" onClick={() => setScreen('campaign-new')}>
@@ -56,18 +112,29 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
           )
         }
       />
+      {error && (
+        <div className="error-banner">
+          <span>!</span>
+          <div>
+            <strong>Error</strong>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
       <Card>
         <div className="toolbar">
           <div className="filters">
             <Select
               value={estado}
               onChange={(v) => {
-                setEstado(v);
+                setEstado(v as EstadoCampana | 'todos');
                 setPagina(1);
               }}
             >
-              {ESTADOS.map((e) => (
-                <option key={e}>{e === 'Todos' ? 'Todos los estados' : e}</option>
+              {ESTADOS.map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
               ))}
             </Select>
             <Select
@@ -77,8 +144,11 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
                 setPagina(1);
               }}
             >
-              {GRUPOS.map((g) => (
-                <option key={g}>{g}</option>
+              <option value="todos">Todos los grupos</option>
+              {grupos.map((g) => (
+                <option key={g.id_grupos} value={g.id_grupos}>
+                  {g.nombre}
+                </option>
               ))}
             </Select>
           </div>
@@ -89,7 +159,6 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
               value={busqueda}
               onChange={(e) => {
                 setBusqueda(e.target.value);
-                setPagina(1);
               }}
             />
           </div>
@@ -98,7 +167,7 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
           </Button>
         </div>
 
-        {visibles.length === 0 ? (
+        {filtradas.length === 0 ? (
           <div className="empty-table">
             <span className="empty-icon">
               <Icon name="target" />
@@ -108,50 +177,31 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
           </div>
         ) : (
           <DataTable
-            headers={['Campaña', 'Grupo objetivo', 'Canales', 'Estado', 'Lanzamiento', 'Interacción']}
-            rows={visibles.map((c) => [
-              <button className="table-link" onClick={() => setScreen('campaign-detail')}>
+            headers={['Campaña', 'Grupo objetivo', 'Canales', 'Estado', 'Lanzamiento']}
+            rows={filtradas.map((c) => [
+              <button className="table-link" onClick={() => onOpenCampaign(c.id_campanas)} key={c.id_campanas}>
                 {c.nombre}
               </button>,
-              c.grupo,
-              <ChannelIcons value={c.canales} />,
-              c.estado === 'Activa' ? (
-                <Badge tone="azul">Activa</Badge>
-              ) : c.estado === 'Finalizada' ? (
-                <Badge tone="bajo">Finalizada</Badge>
-              ) : (
-                <Badge>Borrador</Badge>
-              ),
-              c.fecha,
-              <strong>{c.interaccion}</strong>,
+              nombreGrupo(c.grupo_id),
+              <ChannelIcons value={c.canales.map((x) => x.canal).join(',')} />,
+              badgeEstado(c.estado),
+              c.iniciada_en ? fecha(c.iniciada_en) : '—',
             ])}
           />
         )}
 
         <div className="table-footer">
           <span>
-            {filtradas.length === 0
-              ? 'Sin campañas que mostrar'
-              : `Mostrando ${desde}–${hasta} de ${filtradas.length} campañas`}
+            {total === 0 ? 'Sin campañas que mostrar' : `Mostrando ${(pagina - 1) * PAGE_SIZE + 1}–${Math.min(pagina * PAGE_SIZE, total)} de ${total} campañas`}
           </span>
           <div className="pagination">
-            <Button
-              small
-              variant="secondary"
-              disabled={paginaActual <= 1}
-              onClick={() => setPagina(Math.max(1, paginaActual - 1))}
-            >
+            <Button small variant="secondary" disabled={pagina <= 1} onClick={() => setPagina(Math.max(1, pagina - 1))}>
               Anterior
             </Button>
             <span aria-live="polite">
-              {paginaActual} / {totalPaginas}
+              {pagina} / {totalPaginas}
             </span>
-            <Button
-              small
-              variant="secondary"
-              disabled={paginaActual >= totalPaginas}
-              onClick={() => setPagina(Math.min(totalPaginas, paginaActual + 1))}
-            >
+            <Button small variant="secondary" disabled={pagina >= totalPaginas} onClick={() => setPagina(Math.min(totalPaginas, pagina + 1))}>
               Siguiente
             </Button>
           </div>
@@ -159,4 +209,10 @@ export function Campaigns({ readonly, setScreen }: { readonly: boolean; setScree
       </Card>
     </>
   );
+}
+
+function fecha(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }

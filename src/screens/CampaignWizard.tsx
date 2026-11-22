@@ -1,36 +1,116 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Screen } from '../types';
-import { plantillas } from '../data';
-import { Badge, Button, Card, EmailPreview, Icon, Input, PageHeader, SectionTitle, Select } from '../components/ui';
+import { Badge, Button, Card, EmailPreview, Icon, Input, PageHeader, SectionTitle } from '../components/ui';
+import {
+  ApiError,
+  crearCampana,
+  definirCanalesCampana,
+  lanzarCampana,
+  listarGrupos,
+  listarPlantillas,
+  type Canal,
+  type Campana,
+  type Grupo,
+  type Plantilla,
+} from '../api';
+import { AVISO, filtrarTexto } from '../filtros';
 
 const STEPS = ['Información', 'Plantilla', 'Canales', 'Confirmación'] as const;
-const GRUPOS_WIZARD = [
-  'Seleccionar grupo…',
-  'Finanzas Europa · 124 miembros',
-  'Recursos Humanos · 86 miembros',
-  'Soporte y Operaciones · 213 miembros',
-  'Dirección · 18 miembros',
-];
 
-/** Wizard de configuración de campaña en cuatro pasos: Información → Plantilla → Canales → Confirmación. */
 
-export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }) {
+export function CampaignWizard({
+  setScreen,
+  onOpenCampaign,
+}: {
+  setScreen: (s: Screen) => void;
+  onOpenCampaign: (id: string) => void;
+}) {
   const [step, setStep] = useState(1);
-  const [nombre, setNombre] = useState('Actualización de credenciales · Q3');
-  const [grupo, setGrupo] = useState(GRUPOS_WIZARD[0]);
-  const [plantillaSel, setPlantillaSel] = useState(0);
-  const [canales, setCanales] = useState({ mail: true, qr: true });
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
-  const seleccionadas = [canales.mail && 'Correo electrónico', canales.qr && 'Código QR'].filter(Boolean) as string[];
-  const puedeContinuar = step !== 3 || seleccionadas.length > 0;
+  const [nombre, setNombre] = useState('');
+  const [grupoId, setGrupoId] = useState('');
+  const [expiracion, setExpiracion] = useState('72');
+  const [plantillaId, setPlantillaId] = useState<string | null>(null);
+  const [canales, setCanales] = useState({ correo: true, qr: false });
+  const [zonasTexto, setZonasTexto] = useState('Recepción\nSala de reuniones');
+
+  useEffect(() => {
+    Promise.all([listarGrupos(100, 0), listarPlantillas({ limit: 100 })])
+      .then(([g, t]) => {
+        setGrupos(g.items);
+        setPlantillas(t.items);
+      })
+      .catch((e) => setError(e instanceof ApiError ? e.message : 'No pudimos cargar grupos y plantillas.'));
+  }, []);
+
+  const grupoSel = grupos.find((g) => g.id_grupos === grupoId) ?? null;
+  const plantillaSel = plantillas.find((p) => p.id_plantillas === plantillaId) ?? null;
+  const seleccionadas: Canal[] = [
+    ...(canales.correo ? (['correo'] as Canal[]) : []),
+    ...(canales.qr ? (['qr'] as Canal[]) : []),
+  ];
+  const zonas = zonasTexto
+    .split('\n')
+    .map((z) => z.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+
+  const puedePaso1 = nombre.trim().length > 0 && !!grupoId && Number(expiracion) >= 1 && Number(expiracion) <= 8760;
+  const puedePaso2 = !!plantillaId;
+  const puedePaso3 = seleccionadas.length > 0 && (!canales.qr || zonas.length > 0);
+
+  const guardar = async (lanzar: boolean) => {
+    setError(null);
+    if (!grupoSel) return;
+    setEnviando(true);
+    try {
+      let c: Campana = await crearCampana({
+        nombre: nombre.trim(),
+        grupo_id: grupoSel.id_grupos,
+        plantilla_id: plantillaId ?? undefined,
+        expiracion_horas: Number(expiracion) || undefined,
+      });
+      if (seleccionadas.length > 0) {
+        c = await definirCanalesCampana(c.id_campanas, {
+          canales: seleccionadas,
+          ...(canales.qr ? { zonas } : {}),
+        });
+      }
+      if (lanzar) {
+        const r = await lanzarCampana(c.id_campanas);
+        setScreen('campaign-detail');
+        onOpenCampaign(r.campana.id_campanas);
+      } else {
+        setScreen('campaign-detail');
+        onOpenCampaign(c.id_campanas);
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No pudimos crear la campaña.');
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   return (
     <>
       <PageHeader
         eyebrow="Campañas / Nueva"
         title="Configurar campaña"
-        description="Crea una simulación segura y controlada."
+        description="Crea una simulación segura y controlada (§12)."
       />
+      {error && (
+        <div className="error-banner">
+          <span>!</span>
+          <div>
+            <strong>Error</strong>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
       <div className="wizard-steps">
         {STEPS.map((s, i) => (
           <div className={`wizard-step${step === i + 1 ? ' active' : ''}${step > i + 1 ? ' done' : ''}`} key={s}>
@@ -51,53 +131,62 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
               <Input
                 label="Nombre de campaña"
                 value={nombre}
-                onChange={setNombre}
-                hint="Visible únicamente para tu equipo."
+                onChange={(v) => setNombre(filtrarTexto(v))}
+                placeholder="Ej. Actualización de nómina Q3"
+                hint="1–255 caracteres · visible solo para tu equipo."
               />
-              <Select label="Grupo de destinatarios" value={grupo} onChange={setGrupo}>
-                {GRUPOS_WIZARD.map((g) => (
-                  <option key={g}>{g}</option>
-                ))}
-              </Select>
+              <label className="field">
+                <span className="field-label">Grupo de destinatarios</span>
+                <select className="input" value={grupoId} onChange={(e) => setGrupoId(e.target.value)}>
+                  <option value="">Seleccionar grupo…</option>
+                  {grupos.map((g) => (
+                    <option key={g.id_grupos} value={g.id_grupos}>
+                      {g.nombre} · {g.metricas.destinatarios_activos} activos
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Input label="Expiración de los tokens (horas)" value={expiracion} onChange={(v) => setExpiracion(v.replace(/[^0-9]/g, ''))} hint="1–8760 · por defecto 72 h. Editable también con la campaña activa." />
             </div>
-            <div className="info-box">
-              <Icon name="users" />
-              <div>
-                <strong>Acerca de los destinatarios</strong>
-                <p>
-                  Los destinatarios no necesitan una cuenta en Scytal. Solo recibirán la simulación por los
-                  canales seleccionados.
-                </p>
+            {grupoSel && grupoSel.metricas.destinatarios_activos === 0 && (
+              <div className="warning-box">
+                <Icon name="alert" />
+                <div>
+                  <strong>Este grupo no tiene destinatarios activos</strong>
+                  <p>El lanzamiento requiere al menos un destinatario activo; agrega miembros en «Grupos y destinatarios».</p>
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
 
         {step === 2 && (
           <>
-            <SectionTitle title="Selecciona una plantilla" description="Recomendadas según el perfil del grupo." />
+            <SectionTitle title="Selecciona una plantilla" description="Incluye las globales de fábrica y las de tu organización." />
             <div className="template-choice">
               <div className="template-list">
-                {plantillas.slice(0, 3).map((t, i) => (
+                {plantillas.map((t) => (
                   <button
-                    className={`template-option${plantillaSel === i ? ' selected' : ''}`}
-                    onClick={() => setPlantillaSel(i)}
-                    key={t.id}
+                    className={`template-option${plantillaId === t.id_plantillas ? ' selected' : ''}`}
+                    onClick={() => setPlantillaId(t.id_plantillas)}
+                    key={t.id_plantillas}
                   >
                     <span className="template-icon">
-                      <Icon name={t.canal} />
+                      <Icon name={t.canal === 'correo' ? 'mail' : 'qr'} />
                     </span>
                     <span>
                       <strong>{t.nombre}</strong>
                       <small>
-                        {t.categoria} · {t.canal === 'mail' ? 'Correo' : 'Código QR'}
+                        {t.perfil} · {t.canal === 'correo' ? 'Correo' : 'QR'}
+                        {t.org_id === null ? ' · global' : ''}
                       </small>
                     </span>
-                    {plantillaSel === i && <Icon name="check" size={15} />}
+                    {plantillaId === t.id_plantillas && <Icon name="check" size={15} />}
                   </button>
                 ))}
+                {plantillas.length === 0 && <p className="section-desc">No hay plantillas disponibles.</p>}
               </div>
-              <EmailPreview asunto={plantillas[plantillaSel].nombre} />
+              <EmailPreview asunto={plantillaSel?.asunto ?? 'Sin plantilla seleccionada'} />
             </div>
           </>
         )}
@@ -106,13 +195,13 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
           <>
             <SectionTitle
               title="Canales de simulación"
-              description="Combina correo electrónico y códigos QR rastreables en una misma campaña."
+              description="REEMPLAZA el set completo. El QR es anónimo y exige al menos una zona."
             />
             <div className="channel-choice">
               {(
                 [
-                  ['mail', 'Correo electrónico', 'Envía la simulación directamente a la bandeja corporativa.'],
-                  ['qr', 'Código QR', 'Incluye un código QR único y rastreable dentro del correo.'],
+                  ['correo', 'Correo electrónico', 'Envía la simulación a la bandeja de cada destinatario.'],
+                  ['qr', 'Código QR', 'Zonas con QR anónimo; los clics van aparte (qr_clics).'],
                 ] as const
               ).map(([id, titulo, descripcion]) => (
                 <label className="check-card" key={id}>
@@ -130,7 +219,14 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
                 </label>
               ))}
             </div>
-            {seleccionadas.length === 0 && (
+            {canales.qr && (
+              <label className="field">
+                <span className="field-label">Zonas QR (una por línea, 1–100 caracteres, máx 50)</span>
+                <textarea className="textarea" value={zonasTexto} onChange={(e) => setZonasTexto(e.target.value)} rows={4} />
+                <span className="field-hint">{zonas.length} zonas definidas.</span>
+              </label>
+            )}
+            {!canales.correo && !canales.qr && (
               <div className="warning-box">
                 <Icon name="alert" />
                 <div>
@@ -139,19 +235,29 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
                 </div>
               </div>
             )}
+            {canales.qr && zonas.length === 0 && (
+              <div className="warning-box">
+                <Icon name="alert" />
+                <div>
+                  <strong>El canal QR necesita zonas</strong>
+                  <p>Define al menos una zona (una por línea).</p>
+                </div>
+              </div>
+            )}
           </>
         )}
 
         {step === 4 && (
           <>
-            <SectionTitle title="Revisa antes de lanzar" description="Una vez activa, la audiencia no puede modificarse." />
+            <SectionTitle title="Revisa antes de lanzar" description="Se crean tokens por destinatario; el envío de correos corre en background." />
             <div className="summary-grid">
               {(
                 [
                   ['Campaña', nombre.trim() || 'Sin título'],
-                  ['Audiencia', grupo === GRUPOS_WIZARD[0] ? 'Sin grupo asignado' : grupo],
-                  ['Plantilla', plantillas[plantillaSel].nombre],
-                  ['Canales', seleccionadas.join(' + ')],
+                  ['Audiencia', grupoSel ? `${grupoSel.nombre} · ${grupoSel.metricas.destinatarios_activos} activos` : 'Sin grupo'],
+                  ['Plantilla', plantillaSel?.nombre ?? '—'],
+                  ['Canales', seleccionadas.map((c) => (c === 'correo' ? 'Correo' : `QR (${zonas.length} zonas)`)).join(' + ') || '—'],
+                  ['Expiración', `${expiracion} h`],
                 ] as const
               ).map(([k, v]) => (
                 <div className="summary-item" key={k}>
@@ -165,8 +271,8 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
               <div>
                 <strong>Qué ocurre al lanzar</strong>
                 <p>
-                  Los integrantes del grupo recibirán la simulación durante las próximas 48 horas y verás la
-                  interacción en tiempo real.
+                  Cada destinatario activo recibe un enlace único {`{FRONTEND_BASE_URL}/track/click?t=…`} y el píxel de
+                  apertura; los QR se generan por zona. Los contadores se reinician si relanzas una campaña terminada.
                 </p>
               </div>
             </div>
@@ -175,8 +281,8 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
               <div>
                 <strong>Uso responsable</strong>
                 <p>
-                  Confirma que esta campaña cuenta con autorización de tu organización y cumple sus políticas
-                  internas. Scytal nunca almacena contraseñas introducidas.
+                  Confirma que esta campaña cuenta con autorización de tu organización. Scytal nunca almacena lo que se
+                  escribe en los formularios falsos.
                 </p>
               </div>
             </div>
@@ -184,19 +290,32 @@ export function CampaignWizard({ setScreen }: { setScreen: (s: Screen) => void }
         )}
 
         <div className="wizard-actions">
-          <Button
-            variant="secondary"
-            onClick={() => (step === 1 ? setScreen('campaigns') : setStep(step - 1))}
-          >
+          <Button variant="secondary" onClick={() => (step === 1 ? setScreen('campaigns') : setStep(step - 1))}>
             Atrás
           </Button>
-          <Button disabled={!puedeContinuar} onClick={() => (step === 4 ? setScreen('campaign-detail') : setStep(step + 1))}>
-            {step === 4 ? 'Lanzar campaña' : 'Continuar'} {step < 4 && <Icon name="arrow" size={14} />}
-          </Button>
+          {step < 4 ? (
+            <Button
+              disabled={(step === 1 && !puedePaso1) || (step === 2 && !puedePaso2) || (step === 3 && !puedePaso3)}
+              onClick={() => setStep(step + 1)}
+            >
+              Continuar <Icon name="arrow" size={14} />
+            </Button>
+          ) : (
+            <span className="table-head-actions">
+              <Button variant="ghost" disabled={enviando} onClick={() => void guardar(false)}>
+                Guardar borrador
+              </Button>
+              <Button disabled={enviando} onClick={() => void guardar(true)}>
+                {enviando ? 'Lanzando…' : 'Lanzar campaña'}
+              </Button>
+            </span>
+          )}
         </div>
       </Card>
       <p className="wizard-note">
-        <Badge tone="medio">Demo</Badge> Al lanzar se navega a los resultados de la campaña Q2 como ejemplo.
+        <Badge tone="medio">Tip</Badge> Guarda como borrador para completar la configuración después (estado `pendiente`).
+        <br />
+        <small>{AVISO.texto}</small>
       </p>
     </>
   );

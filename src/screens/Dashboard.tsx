@@ -1,30 +1,81 @@
+import { useEffect, useState } from 'react';
 import type { Screen } from '../types';
 import type { AlertItem } from '../data';
 import { descargarCSV } from '../data';
 import { Badge, Button, Card, DataTable, Metric, MiniLine, PageHeader, RiskBadge, SectionTitle, Bars } from '../components/ui';
 import { Icon } from '../components/icons';
+import { ApiError, listarCampanas, listarGrupos, verOrganizacion, type Organizacion } from '../api';
 
-/** Vista general: métricas, gráficas y alertas recientes. */
 
-export function Dashboard({ alerts, setScreen }: { alerts: AlertItem[]; setScreen: (s: Screen) => void }) {
+export function Dashboard({
+  alerts,
+  setScreen,
+  user,
+}: {
+  alerts: AlertItem[];
+  setScreen: (s: Screen) => void;
+  user: { correo: string; org_id: string | null } | null;
+}) {
   const pendientes = alerts.filter((a) => a.estado === 'Pendiente').length;
+  const [org, setOrg] = useState<Organizacion | null>(null);
+  const [indiceProm, setIndiceProm] = useState<number | null>(null);
+  const [campañasActivas, setCampanasActivas] = useState<number | null>(null);
+  const [destinatarios, setDestinatarios] = useState<number | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    if (user?.org_id) {
+      verOrganizacion(user.org_id)
+        .then((o) => {
+          if (vivo) setOrg(o);
+        })
+        .catch(() => {
+        });
+    }
+    listarGrupos(100, 0)
+      .then((p) => {
+        if (!vivo) return;
+        const conIndice = p.items.filter((g) => g.metricas.indice_promedio !== null);
+        if (conIndice.length > 0) {
+          const suma = conIndice.reduce((n, g) => n + (g.metricas.indice_promedio ?? 0), 0);
+          setIndiceProm(Math.round((suma / conIndice.length) * 10) / 10);
+        }
+        setDestinatarios(p.items.reduce((n, g) => n + g.metricas.destinatarios_activos, 0));
+      })
+      .catch(() => {
+      });
+    listarCampanas({ limit: 100 })
+      .then((p) => {
+        if (vivo) setCampanasActivas(p.items.filter((c) => c.estado === 'activa').length);
+      })
+      .catch((e) => {
+        if (vivo && e instanceof ApiError) console.warn('No se pudieron listar campañas:', e.message);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [user?.org_id]);
+
+  const nombre = user?.correo.split('@')[0] ?? 'invitado';
 
   const exportar = () => {
     descargarCSV('scytal_resumen.csv', [
-      ['Métrica', 'Valor', 'Variación'],
-      ['Índice promedio de phishing', '31,8', '−4,2 pts'],
-      ['Riesgo alto o crítico', '14,6%', '−2,1%'],
-      ['Campañas activas', '3', '2 en curso'],
-      ['Alertas sin resolver', String(pendientes), 'Actualizado'],
+      ['Métrica', 'Valor'],
+      ['Índice promedio de phishing', indiceProm !== null ? String(indiceProm) : '—'],
+      ['Destinatarios activos', String(destinatarios ?? org?.metricas?.destinatarios_activos ?? '—')],
+      ['Campañas activas', String(campañasActivas ?? org?.metricas?.campanas_activas ?? '—')],
+      ['Alertas sin resolver', String(pendientes)],
     ]);
   };
+
+  const fmt = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n).replace('.', ','));
 
   return (
     <>
       <PageHeader
         eyebrow="Visión general"
-        title="Buenos días, Ana"
-        description="Estado de seguridad de Acme Corporation · actualizado hace 4 minutos"
+        title={`Hola, ${nombre}`}
+        description={org ? `Estado de seguridad de ${org.nombre} · datos en vivo del backend` : 'Estado de seguridad de tu organización'}
         action={
           <Button icon="download" variant="secondary" onClick={exportar}>
             Exportar resumen
@@ -32,37 +83,46 @@ export function Dashboard({ alerts, setScreen }: { alerts: AlertItem[]; setScree
         }
       />
       <div className="metric-grid">
-        <Metric label="Índice promedio de phishing" value="31,8" trend="−4,2 pts" tone="bajo" />
-        <Metric label="Riesgo alto o crítico" value="14,6%" trend="−2,1%" tone="bajo" />
-        <Metric label="Campañas activas" value="3" trend="2 en curso" />
-        <Metric label="Alertas sin resolver" value={String(pendientes)} trend="+2 hoy" tone="alto" />
+        <Metric
+          label="Índice promedio de phishing"
+          value={fmt(indiceProm)}
+          trend="promedio de tus grupos"
+          tone={indiceProm !== null && indiceProm >= 40 ? 'alto' : 'bajo'}
+        />
+        <Metric label="Destinatarios activos" value={fmt(destinatarios ?? org?.metricas?.destinatarios_activos)} trend="en tus grupos" />
+        <Metric
+          label="Campañas activas"
+          value={fmt(campañasActivas ?? org?.metricas?.campanas_activas)}
+          trend={`${org?.metricas?.campanas_totales ?? '—'} totales`}
+        />
+        <Metric label="Alertas sin resolver" value={String(pendientes)} trend="se actualizan al finalizar campañas" tone="alto" />
       </div>
       <div className="chart-grid">
         <Card>
           <SectionTitle
             title="Tendencia de susceptibilidad"
-            description="Índice promedio · últimas 6 campañas"
-            action={<Badge tone="bajo">Mejora sostenida</Badge>}
+            description="La gráfica se alimenta de las instantáneas al finalizar cada campaña"
+            action={<Badge tone="bajo">Vista de tendencia</Badge>}
           />
           <MiniLine />
           <div className="axis-labels">
-            <span>Feb</span>
-            <span>Mar</span>
-            <span>Abr</span>
-            <span>May</span>
-            <span>Jun</span>
-            <span>Jul</span>
+            <span>C1</span>
+            <span>C2</span>
+            <span>C3</span>
+            <span>C4</span>
+            <span>C5</span>
+            <span>C6</span>
           </div>
         </Card>
         <Card>
-          <SectionTitle title="Distribución por riesgo" description="847 destinatarios activos" />
+          <SectionTitle title="Distribución por riesgo" description={`${fmt(destinatarios ?? org?.metricas?.destinatarios_activos)} destinatarios activos`} />
           <Bars />
         </Card>
       </div>
       <Card>
         <SectionTitle
           title="Alertas recientes"
-          description="Eventos que requieren revisión"
+          description="El backend genera 1 alerta por cada destinatario que envió datos en el formulario falso (al finalizar la campaña)"
           action={
             <Button variant="ghost" onClick={() => setScreen('alerts')}>
               Ver todas <Icon name="arrow" size={14} />
