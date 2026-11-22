@@ -23,3 +23,8 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Pruebas / análisis estático (CodeQL) — no se versionan
+mi-db/
+resultados.sarif
+*.sarif

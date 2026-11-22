@@ -150,6 +150,26 @@ npm run typecheck
 - **Autenticación:** el cliente usa `VITE_API_URL` (por defecto `http://localhost:8000`) para registro, login, enrolamiento/confirmación TOTP, refresh rotativo, consulta de `/auth/me`, logout y cambio de contraseña. Los tokens viven solo en memoria.
 - Los filtros, búsquedas y paginación de las tablas son funcionales; los botones principales cierran sus acciones (exportar CSV real, finalizar campaña con confirmación, marcar alertas como revisadas, invitar usuarios, etc.).
 
+## Conexión con la API · módulos de negocio (contrato v1.4)
+
+El cliente completo vive en `src/api.ts`: además de `/auth`, cubre los módulos de negocio
+del contrato (`backend-scytall/scytal-backend/prompt_frontend.md`) con tipados espejo de
+`app/schemas/*.py`, paginación `limit/offset` y errores normalizados (`NOT_FOUND`,
+`FORBIDDEN`, `PASSWORD_CHANGE_REQUIRED`, `CONFLICT`, …).
+
+| Módulo | Pantalla | Qué es real |
+|---|---|---|
+| §7 `/organizations` | Configuración → Cuenta | Datos y métricas de la org; renombrar (solo admin de la org) |
+| §8 `/users` | Configuración → Usuarios | Listar, invitar (contraseña temporal por correo), cambiar rol, desactivar; autodesactivación bloqueada |
+| §9 `/groups` | Grupos y destinatarios | Alta/edición/baja de grupos con métricas; `409 CONFLICT` si hay campañas asociadas |
+| §10 `/recipients` | Grupos y destinatarios + Perfil | Alta manual, **importación CSV multipart** (`correo,grupo`), desactivar lógico, detalle con histórico |
+| §11 `/templates` | Plantillas + Editor | Globales read-only, propias con `en_uso`, borrado protegido, **importador por URL** (guardas SSRF en el servidor) y **previsualización real** (`GET /templates/{id}/previsualizar` → enlace efímero de 30 min que abre la landing en pestaña aparte) |
+| §12 `/campaigns` | Campañas + Wizard + Detalle | Ciclo completo `pendiente → activa → completada/cancelada`: canales y zonas QR, launch, `/qr` (PNG base64 sin prefijo `data:`), stats, finish (índice 25/25/50 + alertas), send-feedback (una vez), relanzamiento |
+| §13 `/track` | nginx (sin fetch en el SPA) | Rutas **públicas** del destinatario (`open`, `click`, `landing`, `submit`, `awareness`): nginx las sirve por **proxy hacia el API** (`location /track/` y `/previsualizar/`), porque el backend arma esas URLs con `FRONTEND_BASE_URL` (`http://localhost:8080`). El SPA solo las abre; el backend renderiza el HTML y su CSP sin JavaScript |
+
+Aún mock (sin sección en el contrato): Alertas, Índice de madurez y Reportes. El Dashboard
+ya mezcla datos reales (org, grupos, campañas) con las alertas de demo.
+
 ## Notas
 
 - La marca se llama **Scytal** (el logo usa wordmark minúscula como decisión de estilo).
