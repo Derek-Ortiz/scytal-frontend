@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import type { AlertItem, RecipientRow } from '../data';
+import type { AlertItem } from '../data';
 import type { Role, Screen, Theme } from '../types';
 import { Badge, Logo } from './ui';
 import { Icon } from './icons';
+import type { Yo } from '../api';
 import { Dashboard } from '../screens/Dashboard';
 import { Campaigns } from '../screens/Campaigns';
 import { CampaignWizard } from '../screens/CampaignWizard';
@@ -48,7 +49,6 @@ const crumbs: Partial<Record<Screen, string>> = {
 const navActive = (screen: Screen): string =>
   screen.startsWith('campaign') ? 'campaigns' : screen === 'recipient' ? 'groups' : screen.startsWith('template') ? 'templates' : screen === 'loading' || screen === 'empty' ? 'dashboard' : screen;
 
-/** Estructura interna: sidebar fija, organización activa, navegación agrupada y topbar. */
 
 export function AppShell({
   screen,
@@ -60,12 +60,16 @@ export function AppShell({
   alerts,
   setAlerts,
   readonly,
-  recipient,
+  recipientId,
   recipientGroup,
-  userEmail,
+  user,
+  campanaId,
+  plantillaId,
   onLogout,
   onPasswordChanged,
   onSelectRecipient,
+  onOpenCampaign,
+  onEditTemplate,
 }: {
   screen: Screen;
   setScreen: (s: Screen) => void;
@@ -76,13 +80,16 @@ export function AppShell({
   alerts: AlertItem[];
   setAlerts: (updater: (prev: AlertItem[]) => AlertItem[]) => void;
   readonly: boolean;
-  recipient: RecipientRow | null;
+  recipientId: string | null;
   recipientGroup: string;
-  /** Correo del usuario autenticado contra el backend (o null en demo). */
-  userEmail: string | null;
+  campanaId: string | null;
+  plantillaId: string | null;
+  user: Yo | null;
   onLogout: () => void;
   onPasswordChanged: (aviso: string) => void;
-  onSelectRecipient: (r: RecipientRow, groupName: string) => void;
+  onSelectRecipient: (id: string, groupName: string) => void;
+  onOpenCampaign: (id: string) => void;
+  onEditTemplate: (id: string | null) => void;
 }) {
   const pendientes = alerts.filter((a) => a.estado === 'Pendiente').length;
   const activo = navActive(screen);
@@ -90,36 +97,36 @@ export function AppShell({
   const content = useMemo(() => {
     switch (screen) {
       case 'dashboard':
-        return <Dashboard alerts={alerts} setScreen={setScreen} />;
+        return <Dashboard alerts={alerts} setScreen={setScreen} user={user} />;
       case 'campaigns':
-        return <Campaigns readonly={readonly} setScreen={setScreen} />;
+        return <Campaigns readonly={readonly} setScreen={setScreen} onOpenCampaign={onOpenCampaign} />;
       case 'campaign-new':
-        return <CampaignWizard setScreen={setScreen} />;
+        return <CampaignWizard setScreen={setScreen} onOpenCampaign={onOpenCampaign} />;
       case 'campaign-detail':
-        return <CampaignDetail readonly={readonly} />;
+        return <CampaignDetail readonly={readonly} campanaId={campanaId} />;
       case 'groups':
         return <Groups readonly={readonly} onSelectRecipient={onSelectRecipient} />;
       case 'recipient':
-        return <Recipient recipient={recipient} groupName={recipientGroup} />;
+        return <Recipient recipientId={recipientId} groupName={recipientGroup} />;
       case 'templates':
-        return <Templates readonly={readonly} setScreen={setScreen} />;
+        return <Templates readonly={readonly} onEditTemplate={onEditTemplate} />;
       case 'template-edit':
-        return <TemplateEdit readonly={readonly} setScreen={setScreen} />;
+        return <TemplateEdit readonly={readonly} setScreen={setScreen} plantillaId={plantillaId} />;
       case 'alerts':
-        return <Alerts alerts={alerts} setAlerts={setAlerts} readonly={readonly} />;
+        return <Alerts setAlerts={setAlerts} readonly={readonly} />;
       case 'maturity':
         return <Maturity />;
       case 'reports':
         return <Reports />;
       case 'settings':
-        return <Settings role={role} theme={theme} setTheme={setTheme} onPasswordChanged={onPasswordChanged} />;
+        return <Settings role={role} theme={theme} setTheme={setTheme} user={user} onPasswordChanged={onPasswordChanged} />;
       case 'empty':
       case 'loading':
         return <SystemStates mode={screen === 'loading' ? 'loading' : 'empty'} setMode={(m) => setScreen(m === 'loading' ? 'loading' : 'empty')} setScreen={setScreen} />;
       default:
-        return <Dashboard alerts={alerts} setScreen={setScreen} />;
+        return <Dashboard alerts={alerts} setScreen={setScreen} user={user} />;
     }
-  }, [screen, readonly, alerts, recipient, recipientGroup, role, theme]);
+  }, [screen, readonly, alerts, recipientId, recipientGroup, role, theme, user, campanaId, plantillaId, onOpenCampaign, onEditTemplate]);
 
   return (
     <div className="app-shell">
@@ -159,10 +166,10 @@ export function AppShell({
             <span>Estados del sistema</span>
           </button>
           <div className="user-card">
-            <span className="avatar">{(userEmail ?? 'AS').slice(0, 2).toUpperCase()}</span>
+            <span className="avatar">{(user?.correo ?? 'AS').slice(0, 2).toUpperCase()}</span>
             <span className="user-data">
-              <strong title={userEmail ?? undefined}>{userEmail ? userEmail.split('@')[0] : 'Ana Silva'}</strong>
-              <small>{userEmail ?? 'ana.silva@acme.es'}</small>
+              <strong title={user?.correo ?? undefined}>{user?.correo.split('@')[0] ?? 'Invitado'}</strong>
+              <small>{user?.correo ?? 'Sesión demo'}</small>
             </span>
             <button
               className="icon-btn"

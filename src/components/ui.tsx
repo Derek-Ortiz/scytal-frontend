@@ -1,10 +1,8 @@
 import { useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Icon } from './icons';
 
-// Re-export para que las pantallas importen Icon junto a los demás componentes
 export { Icon };
 
-/** Sistemas de diseño: componentes reutilizables 100% propios (sin librerías externas). */
 
 export function Button({
   children,
@@ -14,6 +12,7 @@ export function Button({
   disabled,
   small,
   type = 'button',
+  title,
 }: {
   children?: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -22,9 +21,10 @@ export function Button({
   disabled?: boolean;
   small?: boolean;
   type?: 'button' | 'submit';
+  title?: string;
 }) {
   return (
-    <button type={type} className={`btn btn-${variant}${small ? ' btn-small' : ''}`} onClick={onClick} disabled={disabled}>
+    <button type={type} className={`btn btn-${variant}${small ? ' btn-small' : ''}`} onClick={onClick} disabled={disabled} title={title}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </button>
@@ -40,6 +40,7 @@ export function Input({
   onChange,
   hint,
   error,
+  disabled,
 }: {
   label?: string;
   placeholder?: string;
@@ -49,6 +50,7 @@ export function Input({
   onChange?: (v: string) => void;
   hint?: string;
   error?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="field">
@@ -60,6 +62,7 @@ export function Input({
         defaultValue={defaultValue}
         onChange={(e: ChangeEvent<HTMLInputElement>) => onChange?.(e.target.value)}
         className={error ? 'input error' : 'input'}
+        disabled={disabled}
       />
       {(hint || error) && <span className={error ? 'field-error' : 'field-hint'}>{error || hint}</span>}
     </label>
@@ -198,7 +201,6 @@ export function Logo({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/* ---------- Composición reutilizada entre pantallas ---------- */
 
 export function Metric({ label, value, trend, tone }: { label: string; value: string; trend: string; tone?: string }) {
   return (
@@ -305,9 +307,6 @@ export function EmailPreview({ asunto = 'Actualización de nómina requerida' }:
   );
 }
 
-/** Código OTP de 6 dígitos con avance automático.
- *  Puede usarse controlado (`value` + `onChange` con la cadena de 6 dígitos)
- *  para los flujos reales del backend, o sin props para maquetas. */
 export function Otp({ value, onChange }: { value?: string; onChange?: (codigo: string) => void }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   const [local, setLocal] = useState<string[]>(['4', '5', '6', '', '', '']);
@@ -354,7 +353,6 @@ export function Otp({ value, onChange }: { value?: string; onChange?: (codigo: s
   );
 }
 
-/** QR_SR simulado determinista (regenerable cambiando `variant`). */
 export function QrPattern({ variant = 0 }: { variant?: number }) {
   const size = 21;
   const bit = (x: number, y: number) => {
