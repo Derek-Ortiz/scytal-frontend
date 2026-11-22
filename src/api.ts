@@ -657,3 +657,216 @@ export async function enviarFeedbackCampana(
 export async function cancelarCampana(id: string): Promise<Campana> {
   return (await autenticado(`/campaigns/${id}/cancel`)) as Campana;
 }
+
+
+export interface EventoAuditoria {
+  id_eventos_auditoria: string;
+  tipo: string;
+  actor_id: string | null;
+  actor_tipo: string;
+  actor_correo: string | null;
+  detalle: string;
+  creado_en: string;
+}
+
+export async function listarAuditoria(
+  o: { tipo?: string; actor_id?: string; desde?: string; hasta?: string; limit?: number; offset?: number } = {},
+): Promise<Pagina<EventoAuditoria>> {
+  return (await autenticado(`/audit${consulta(o)}`, { metodo: 'GET' })) as Pagina<EventoAuditoria>;
+}
+
+
+export interface Alerta {
+  id_alertas: string;
+  tipo: string;
+  referencia_tipo: string | null;
+  referencia_id: string | null;
+  resuelto: boolean;
+  resuelto_en: string | null;
+  creado_en: string;
+}
+
+export async function listarAlertas(
+  o: { tipo?: string; resuelto?: boolean; limit?: number; offset?: number } = {},
+): Promise<Pagina<Alerta>> {
+  return (await autenticado(
+    `/alerts${consulta({ ...o, resuelto: o.resuelto === undefined ? undefined : String(o.resuelto) })}`,
+    { metodo: 'GET' },
+  )) as Pagina<Alerta>;
+}
+
+export async function resolverAlerta(id: string): Promise<Alerta> {
+  return (await autenticado(`/alerts/${id}/resolve`, { metodo: 'PATCH' })) as Alerta;
+}
+
+
+export interface DistribucionMadurez {
+  bajo: number;
+  medio: number;
+  alto: number;
+  critico: number;
+}
+
+export interface ResumenMadurez {
+  destinatarios_activos: number;
+  indice_promedio: number | null;
+  distribucion: DistribucionMadurez;
+  campanas: { total: number; completadas: number };
+  ultima_finalizacion: string | null;
+}
+
+export interface ItemHistorialMadurez {
+  campana_id: string | null;
+  puntaje_phishing: number;
+  nivel: string;
+  creado_en: string;
+}
+
+export interface ItemTendenciaMadurez {
+  campana_id: string;
+  nombre: string;
+  finalizada_en: string | null;
+  promedio: number;
+  n_destinatarios: number;
+}
+
+export async function resumenMadurez(): Promise<ResumenMadurez> {
+  return (await autenticado('/maturity/organization/summary', { metodo: 'GET' })) as ResumenMadurez;
+}
+
+export async function historialMadurezDestinatario(
+  id: string,
+  limit = 50,
+): Promise<{ destinatario_id: string; items: ItemHistorialMadurez[] }> {
+  return (await autenticado(`/maturity/recipients/${id}/history${consulta({ limit })}`, {
+    metodo: 'GET',
+  })) as never;
+}
+
+export async function tendenciaMadurezGrupo(
+  id: string,
+): Promise<{ grupo_id: string; items: ItemTendenciaMadurez[] }> {
+  return (await autenticado(`/maturity/groups/${id}/trend`, { metodo: 'GET' })) as never;
+}
+
+
+export type FormatoReporte = 'csv' | 'pdf';
+
+async function pedirArchivo(path: string, reintento = false): Promise<{ blob: Blob; nombre: string | null }> {
+  const cabeceras: Record<string, string> = {};
+  if (access) cabeceras['Authorization'] = `Bearer ${access}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { method: 'GET', headers: cabeceras });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      code: 'NETWORK',
+      message: `No pudimos conectar con la API en ${API_URL}. Revisa que el backend esté levantado.`,
+    });
+  }
+
+  const requestId = res.headers.get('X-Request-Id');
+
+  if (res.ok) {
+    const cd = res.headers.get('Content-Disposition');
+    const m = cd ? /filename="?([^";]+)"?/i.exec(cd) : null;
+    return { blob: await res.blob(), nombre: m ? m[1] : null };
+  }
+
+  if (res.status === 401 && refresh && !reintento) {
+    try {
+      const par = (await pedir('/auth/refresh', { cuerpo: { refresh_token: refresh } })) as ParTokens;
+      access = par.access_token;
+      refresh = par.refresh_token;
+    } catch {
+      limpiarSesion();
+      escucha?.('Tu sesión caducó. Inicia sesión de nuevo.');
+      throw new ApiError({ status: 401, code: 'SESSION_INVALIDATED', message: 'Tu sesión caducó. Inicia sesión de nuevo.' });
+    }
+    return pedirArchivo(path, true);
+  }
+
+  let code = 'INTERNAL_ERROR';
+  let message = `Error ${res.status}`;
+  let details: unknown = null;
+  try {
+    const cuerpo = await res.json();
+    const err =
+      (cuerpo?.error && typeof cuerpo.error === 'object' && cuerpo.error) ||
+      (cuerpo?.detail?.error && typeof cuerpo.detail.error === 'object' && cuerpo.detail.error) ||
+      null;
+    if (err) {
+      code = String((err as { code?: unknown }).code ?? code);
+      message = String((err as { message?: unknown }).message ?? message);
+      details = (err as { details?: unknown }).details ?? null;
+    } else if (typeof cuerpo?.detail === 'string') {
+      message = cuerpo.detail;
+    }
+  } catch {
+  }
+
+  throw new ApiError({ status: res.status, code, message, details, requestId });
+}
+
+export function descargarBlob(blob: Blob, nombre: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function exportarReporteCampana(id: string, formato: FormatoReporte = 'pdf'): Promise<string> {
+  const { blob, nombre } = await pedirArchivo(`/reports/campaigns/${id}/export?format=${formato}`);
+  const archivo = nombre ?? `campana-${id}.${formato}`;
+  descargarBlob(blob, archivo);
+  return archivo;
+}
+
+export async function exportarReporteGrupo(id: string, formato: FormatoReporte = 'pdf'): Promise<string> {
+  const { blob, nombre } = await pedirArchivo(`/reports/groups/${id}/export?format=${formato}`);
+  const archivo = nombre ?? `grupo-${id}.${formato}`;
+  descargarBlob(blob, archivo);
+  return archivo;
+}
+
+
+export interface VeredictoFortaleza {
+  score: number;
+  es_fuerte: boolean;
+  errores: string[];
+}
+
+export interface RangoPwned {
+  prefijo: string;
+  total_conocidas: number;
+  conteos: Record<string, number>;
+}
+
+export async function chequearFortalezaClave(password: string): Promise<VeredictoFortaleza> {
+  return (await pedir('/pwned/strength-check', { cuerpo: { password }, access: true })) as VeredictoFortaleza;
+}
+
+export async function consultarRangoPwned(prefijo: string): Promise<RangoPwned> {
+  return (await pedir(`/pwned/range/${encodeURIComponent(prefijo)}`, { metodo: 'GET', access: true })) as RangoPwned;
+}
+
+export async function comprobarFiltracion(password: string): Promise<boolean | null> {
+  try {
+    const buffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password));
+    const hex = Array.from(new Uint8Array(buffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase();
+    const rango = await consultarRangoPwned(hex.slice(0, 5));
+    const sufijo = hex.slice(5);
+    return Object.keys(rango.conteos).some((k) => k.toUpperCase() === sufijo);
+  } catch {
+    return null;
+  }
+}

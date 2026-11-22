@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Role, Theme } from '../types';
 import { Badge, Button, Card, DataTable, Icon, Input, PageHeader, QrPattern, SectionTitle } from '../components/ui';
-import { ApiError, cambiarContrasena, cambiarRolUsuario, desactivarUsuario, invitarUsuario, listarUsuarios, verOrganizacion, actualizarOrganizacion, type Organizacion, type UsuarioItem, type Yo } from '../api';
-import { evaluarClave, MINIMO_CLAVE } from '../password';
+import { ApiError, cambiarContrasena, cambiarRolUsuario, comprobarFiltracion, desactivarUsuario, invitarUsuario, listarUsuarios, verOrganizacion, actualizarOrganizacion, type Organizacion, type UsuarioItem, type Yo } from '../api';
+import { evaluarClave, MINIMO_CLAVE, useFortalezaServidor } from '../password';
 import { AVISO, filtrarClave } from '../filtros';
 
 
@@ -217,6 +217,7 @@ function Seguridad({ onPasswordChanged }: { onPasswordChanged: (aviso: string) =
   const [enviando, setEnviando] = useState(false);
 
   const veredicto = evaluarClave(nueva);
+  const fortaleza = useFortalezaServidor(nueva);
   const suficiente = nueva.length >= MINIMO_CLAVE && veredicto.valida && actual.trim().length > 0;
 
   async function actualizar() {
@@ -227,6 +228,11 @@ function Seguridad({ onPasswordChanged }: { onPasswordChanged: (aviso: string) =
     }
     setEnviando(true);
     try {
+      const filtrada = await comprobarFiltracion(nueva);
+      if (filtrada === true) {
+        setError('La contraseña nueva aparece en filtraciones públicas conocidas. Elige otra.');
+        return;
+      }
       await cambiarContrasena(actual.trim(), nueva);
       onPasswordChanged('Contraseña actualizada. Las sesiones quedaron invalidadas y debes volver a iniciar sesión.');
     } catch (e) {
@@ -277,6 +283,13 @@ function Seguridad({ onPasswordChanged }: { onPasswordChanged: (aviso: string) =
             {veredicto.etiqueta} · se agrieta en {veredicto.tiempo}
           </span>
         </div>
+        {(fortaleza.score !== null || fortaleza.aviso) && (
+          <p className="field-hint">
+            {fortaleza.score !== null
+              ? `Validación del servidor (POST /pwned/strength-check): ${fortaleza.score}/4${fortaleza.errores.length ? ` · ${fortaleza.errores.join(' · ')}` : ' · sin incidencias'}`
+              : fortaleza.aviso}
+          </p>
+        )}
         <div className="breach-ok">
           <Icon name="shield" size={16} />
           <span>HIBP (k-anonimato) + historial: comprobado en el servidor al enviar.</span>
