@@ -24,7 +24,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configurar pnpm
         uses: pnpm/action-setup@v4
@@ -83,7 +83,7 @@ jobs:
       SSH_USER: ${{ vars.SSH_USER || 'ubuntu' }}
     steps:
       - name: Checkout (ficheros de deploy/)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validar configuración de despliegue
         env:
