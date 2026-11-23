@@ -77,11 +77,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     env:
       FRONT_HOST: ${{ secrets.FRONT_HOST }}
+      SSH_USER: ${{ vars.SSH_USER || 'ubuntu' }}
     steps:
       - name: Checkout (ficheros de deploy/)
         uses: actions/checkout@v4
+
+      - name: Validar configuración de despliegue
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: |
+          test -n "$FRONT_HOST" || { echo "::error::Configura el secreto FRONT_HOST."; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "::error::Configura el secreto SSH_PRIVATE_KEY."; exit 1; }
+          test -n "$DOMAIN" || { echo "::error::Configura la variable DOMAIN."; exit 1; }
 
       # La clave nunca se imprime: viaja por variable de entorno al fichero.
       - name: Configurar clave SSH
@@ -89,18 +100,38 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$FRONT_HOST" >> ~/.ssh/known_hosts
+          if [[ "$FRONT_HOST" == *@* ]]; then
+            FRONT_TARGET="$FRONT_HOST"
+            SCAN_HOST="${FRONT_HOST#*@}"
+          else
+            FRONT_TARGET="${SSH_USER}@${FRONT_HOST}"
+            SCAN_HOST="$FRONT_HOST"
+          fi
+          echo "FRONT_TARGET=$FRONT_TARGET" >> "$GITHUB_ENV"
+          ssh-keyscan -H "$SCAN_HOST" >> ~/.ssh/known_hosts
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Subir compose y Caddyfile
         run: |
-          scp -o StrictHostKeyChecking=accept-new \
-            deploy/docker-compose.prod.yml "$FRONT_HOST:/opt/scytal/docker-compose.yml"
-          scp -o StrictHostKeyChecking=accept-new \
-            deploy/Caddyfile "$FRONT_HOST:/opt/scytal/Caddyfile"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$FRONT_TARGET" "sudo mkdir -p /opt/scytal &&
+             sudo chown -R \$(id -u):\$(id -g) /opt/scytal"
+          scp -o BatchMode=yes -o IdentitiesOnly=yes \
+            deploy/docker-compose.prod.yml "${FRONT_TARGET}:/opt/scytal/docker-compose.yml"
+          scp -o BatchMode=yes -o IdentitiesOnly=yes \
+            deploy/Caddyfile "${FRONT_TARGET}:/opt/scytal/Caddyfile"
 
       - name: Actualizar imagen y reiniciar servicios
         run: |
-          IMAGE="${GITHUB_REPOSITORY,,}"
-          ssh "$FRONT_HOST" "cd /opt/scytal && sed -i 's|^WEB_IMAGE=.*|WEB_IMAGE=ghcr.io/${IMAGE}:sha-${GITHUB_SHA}|' .env && docker compose pull web && docker compose up -d && docker image prune -f"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}"
+          printf '%s' "$GITHUB_TOKEN" | ssh -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$FRONT_TARGET" "docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$FRONT_TARGET" \
+            "cd /opt/scytal && sed -i 's|^WEB_IMAGE=.*|WEB_IMAGE=$IMAGE|' .env &&
+             docker compose pull web &&
+             docker compose up -d &&
+             docker logout ghcr.io &&
+             docker image prune -f"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
