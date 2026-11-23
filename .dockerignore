@@ -14,6 +14,22 @@ borrador
 .idea
 *.log
 
+# Variables locales y material criptográfico
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
 # Documentación (no se necesita dentro de la imagen)
 *.md
 

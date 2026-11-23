@@ -7,6 +7,22 @@ dist/
 dist-ssr/
 *.local
 .env
+.env.*
+!.env.example
+
+# Claves y certificados locales
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
 
 # Editor y sistema
 .vscode/*
