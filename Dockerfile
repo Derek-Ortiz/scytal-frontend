@@ -28,6 +28,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json vite.config.t
 COPY public ./public
 COPY src ./src
 
+# URL base de la API que se incrusta en el bundle (src/api.ts).
+# CI la pasa como https://$DOMAIN/api; el compose local como /api.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN pnpm build
 
 # ============================================================
@@ -35,7 +40,13 @@ RUN pnpm build
 # ============================================================
 FROM nginx:1.27-alpine AS runtime
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Host del backend para los proxies de nginx (plantilla ${BACKEND_HOST}).
+# Por defecto el backend corre en el host: puerto 8000 (desarrollo local).
+ENV BACKEND_HOST=host.docker.internal:8000
+
+# nginx procesa /etc/nginx/templates/*.template con envsubst al arrancar
+# (sustituye solo variables definidas en el entorno; $host, $uri… se conservan).
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

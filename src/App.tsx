@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { AlertItem } from './data';
-import { alertasIniciales } from './data';
 import type { Role, Screen, Theme } from './types';
 import { AppShell } from './components/AppShell';
 import { Landing } from './screens/Landing';
 import { AuthShell, type AuthMode } from './screens/Auth';
-import { haySesion, limpiarSesion, onSesionExpirada, rolInterfaz, salir, type Yo } from './api';
+import { ApiError, haySesion, limpiarSesion, listarAlertas, onSesionExpirada, rolInterfaz, salir, type Yo } from './api';
 
 
 const clavesVistasAuth: Screen[] = ['login', 'register', 'totp', 'onboarding', 'password'];
@@ -21,7 +20,7 @@ export default function App() {
     }
   });
   const [role, setRole] = useState<Role>('org_admin');
-  const [alerts, setAlerts] = useState<AlertItem[]>(alertasIniciales);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [recipientGroup, setRecipientGroup] = useState('');
   const [campanaId, setCampanaId] = useState<string | null>(null);
@@ -74,6 +73,46 @@ export default function App() {
     setRole(rolInterfaz(me.rol));
   };
 
+  useEffect(() => {
+    if (!user) {
+      setAlerts([]);
+      return;
+    }
+
+    let vivo = true;
+    listarAlertas({ limit: 100 })
+      .then((pagina) => {
+        if (!vivo) return;
+        setAlerts(
+          pagina.items.map((alerta) => ({
+            id: alerta.id_alertas,
+            tipo: alerta.tipo,
+            contexto: alerta.referencia_tipo
+              ? `${alerta.referencia_tipo} ${alerta.referencia_id?.slice(0, 8) ?? ''}`
+              : 'Sistema',
+            severidad: /phishing|filtrad|critic/i.test(alerta.tipo)
+              ? 'Crítico'
+              : /login|acceso|bloque/i.test(alerta.tipo)
+                ? 'Medio'
+                : /cuenta|rol|admin/i.test(alerta.tipo)
+                  ? 'Bajo'
+                  : 'Alto',
+            fecha: fechaAlerta(alerta.creado_en),
+            estado: alerta.resuelto ? 'Resuelta' : 'Pendiente',
+          })),
+        );
+      })
+      .catch((e) => {
+        if (vivo && !(e instanceof ApiError && e.status === 401)) {
+          setNotice(e instanceof ApiError ? e.message : 'No pudimos cargar las alertas.');
+        }
+      });
+
+    return () => {
+      vivo = false;
+    };
+  }, [user]);
+
   const cerrarSesion = () => {
     void salir();
     setUser(null);
@@ -112,6 +151,12 @@ export default function App() {
 
   if (screen === 'landing') {
     return <Landing setScreen={irA} />;
+  }
+
+  function fechaAlerta(iso: string): string {
+    const fecha = new Date(iso);
+    if (Number.isNaN(fecha.getTime())) return '—';
+    return fecha.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   if (clavesVistasAuth.includes(screen)) {

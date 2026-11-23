@@ -5,6 +5,10 @@ services:
     build:
       context: .
       target: runtime
+      args:
+        # Misma estrategia que en producción: el bundle habla con la API en el
+        # mismo origen (nginx quita el prefijo /api y hace proxy al backend).
+        VITE_API_URL: /api
     image: scytal-frontend:latest
     ports:
       - "${SCYTAL_PORT:-8080}:80"

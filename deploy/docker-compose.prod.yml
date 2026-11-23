@@ -1,0 +1,32 @@
+name: scytal
+
+services:
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/derek-ortiz/scytal-frontend:latest}
+    expose:
+      - "80"
+    environment:
+      # Host del backend (API). En EC2 el backend publica el 8000 en el host.
+      BACKEND_HOST: ${BACKEND_HOST:-host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Define DOMAIN en /opt/scytal/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

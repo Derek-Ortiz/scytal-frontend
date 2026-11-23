@@ -22,3 +22,7 @@ Dockerfile
 docker-compose.yml
 docker-compose.override.yml
 .dockerignore
+
+# CI/CD y despliegue (no hacen falta dentro de la imagen)
+.github
+deploy

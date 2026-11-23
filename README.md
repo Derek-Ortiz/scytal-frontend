@@ -167,8 +167,9 @@ del contrato (`backend-scytall/scytal-backend/prompt_frontend.md`) con tipados e
 | §12 `/campaigns` | Campañas + Wizard + Detalle | Ciclo completo `pendiente → activa → completada/cancelada`: canales y zonas QR, launch, `/qr` (PNG base64 sin prefijo `data:`), stats, finish (índice 25/25/50 + alertas), send-feedback (una vez), relanzamiento |
 | §13 `/track` | nginx (sin fetch en el SPA) | Rutas **públicas** del destinatario (`open`, `click`, `landing`, `submit`, `awareness`): nginx las sirve por **proxy hacia el API** (`location /track/` y `/previsualizar/`), porque el backend arma esas URLs con `FRONTEND_BASE_URL` (`http://localhost:8080`). El SPA solo las abre; el backend renderiza el HTML y su CSP sin JavaScript |
 
-Aún mock (sin sección en el contrato): Alertas, Índice de madurez y Reportes. El Dashboard
-ya mezcla datos reales (org, grupos, campañas) con las alertas de demo.
+El resumen ejecutivo de Reportes no tiene una ruta equivalente en el contrato: su CSV se
+genera localmente con los datos ya cargados, mientras que los reportes de campaña y grupo
+se descargan desde el backend. Alertas e Índice de madurez consumen sus rutas reales.
 
 ## Notas
 
