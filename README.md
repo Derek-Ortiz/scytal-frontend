@@ -1,5 +1,7 @@
 # Scytal · Frontend
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Aplicación web **B2B SaaS** para simulaciones de phishing, análisis de riesgo humano y administración protegida. Este repositorio contiene el frontend; las pantallas operativas conservan datos de demostración y el acceso se conecta al backend de autenticación Scytal.
 
 ## Stack
@@ -176,3 +178,11 @@ se descargan desde el backend. Alertas e Índice de madurez consumen sus rutas r
 - La marca se llama **Scytal** (el logo usa wordmark minúscula como decisión de estilo).
 - El borrador del diseño original vive en la carpeta `borrador/`; **no se copia dentro de la imagen Docker** (aporte de tamaño) y sirve solo como referencia.
 - Tras cambiar dependencias o configuración de Vite hay que reconstruir la imagen (`docker compose build`); los cambios de código en `src/` requieren rehacer el build de `web`.
+
+## Licencia
+
+Este proyecto se distribuye bajo la [Licencia MIT](LICENSE).
+
+## Uso responsable
+
+Esta herramienta está destinada únicamente a capacitación y evaluación autorizadas. No debe usarse contra personas sin su consentimiento. Scytal no almacena lo que se escribe en los formularios simulados.
