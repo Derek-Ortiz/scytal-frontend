@@ -38,7 +38,7 @@ RUN pnpm build
 # ============================================================
 # runtime · nginx sirviendo el build estático
 # ============================================================
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 
 # Host del backend para los proxies de nginx (plantilla ${BACKEND_HOST}).
 # Por defecto el backend corre en el host: puerto 8000 (desarrollo local).
