@@ -4,7 +4,7 @@
 # deps · instala las dependencias con pnpm
 #        (Usado por el build de producción y por el servicio `dev`)
 # ============================================================
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 
 RUN npm install --global pnpm@12.16.1
@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 # ============================================================
 # build · compila la aplicación de producción (dist/)
 # ============================================================
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 RUN npm install --global pnpm@12.16.1
