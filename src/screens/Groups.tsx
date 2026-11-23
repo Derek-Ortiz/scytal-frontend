@@ -327,7 +327,18 @@ export function Groups({
                   )}
                 </div>
               ) : (
-                <DataTable
+                <>
+                  {!readonly && (
+                    <span className="table-head-actions" style={{ marginBottom: '0.75rem' }}>
+                      <Button small variant="secondary" icon="plus" onClick={() => setShowDest(true)}>
+                        Agregar
+                      </Button>
+                      <Button small variant="secondary" icon="upload" onClick={() => document.getElementById('csv-import')?.click()}>
+                        Importar CSV
+                      </Button>
+                    </span>
+                  )}
+                  <DataTable
                   headers={['Destinatario', 'Estado', 'Creado', ...(readonly ? [] : ['Acciones'])]}
                   rows={destinatarios.map((d) => [
                     <button className="table-link" onClick={() => onSelectRecipient(d.id_destinatarios, grupoSel.nombre)} key={d.id_destinatarios}>
@@ -347,7 +358,8 @@ export function Groups({
                           ),
                         ]),
                   ])}
-                />
+                  />
+                </>
               )}
 
               {showDest && !readonly && (
